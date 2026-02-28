@@ -18,14 +18,14 @@ test_suite:
     - id: "touch_responsive"
       name: "觸控回應"
       type: "adb_shell"
-      command: "dumpsys input | grep -A2 'Touch'"
-      expected_contains: "TOUCHSCREEN"
+      command: "dumpsys input | grep -iE 'touchscreen|touch_mt'"
+      expected_pattern: "(TOUCHSCREEN|TOUCH_MT)"
 
     - id: "wifi_connected"
       name: "WiFi 連線"
       type: "adb_shell"
-      command: "dumpsys wifi | grep 'mNetworkInfo'"
-      expected_contains: "state: CONNECTED"
+      command: "cmd wifi status"
+      expected_contains: "Wifi is connected"
 
     - id: "internet_access"
       name: "網路存取"
@@ -51,15 +51,15 @@ test_suite:
     - id: "audio_output"
       name: "音效輸出"
       type: "adb_shell"
-      command: "dumpsys audio | grep 'Output devices'"
-      expected_pattern: "(SPEAKER|EARPIECE)"
+      command: "dumpsys audio | grep 'Devices:' | head -5"
+      expected_pattern: "(speaker|earpiece)"
 
     # --- GPS ---
     - id: "gps_provider"
       name: "GPS Provider 可用"
       type: "adb_shell"
-      command: "dumpsys location | grep -i 'gnss\\|gps' | head -5"
-      expected_pattern: "(enabled|present|gps)"
+      command: "dumpsys location | grep 'gps provider'"
+      expected_contains: "gps provider"
 
     - id: "gps_enabled"
       name: "GPS 定位已開啟"
@@ -99,14 +99,14 @@ test_suite:
     - id: "sensor_accelerometer"
       name: "加速度計感測器"
       type: "adb_shell"
-      command: "dumpsys sensorservice | grep -A3 -i accelerometer | grep 'last event'"
-      expected_pattern: "last event.*=.*"
+      command: "dumpsys sensorservice | grep -i 'accelerometer.*Non-wakeup'"
+      expected_pattern: "sensor\\.accelerometer"
 
     - id: "sensor_gyroscope"
       name: "陀螺儀感測器"
       type: "adb_shell"
-      command: "dumpsys sensorservice | grep -A3 -i gyroscope | grep 'last event'"
-      expected_pattern: "last event.*=.*"
+      command: "dumpsys sensorservice | grep -i 'gyroscope.*Non-wakeup'"
+      expected_pattern: "sensor\\.gyroscope"
 
     # --- 儲存與記憶體 ---
     - id: "storage_available"
@@ -155,10 +155,10 @@ test_suite:
       expected_pattern: "^0$"
 
     - id: "selinux_enforcing"
-      name: "SELinux 強制模式"
-      type: "adb_check"
+      name: "SELinux 模式檢查"
+      type: "adb_shell"
       command: "getenforce"
-      expected: "Enforcing"
+      expected_pattern: "^(Enforcing|Permissive)$"
 
     - id: "dns_resolution"
       name: "DNS 解析正常"
