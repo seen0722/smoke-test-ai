@@ -174,9 +174,9 @@ class Orchestrator:
         if "json" in formats:
             json_path = output_dir / f"{self.device_name}_results.json"
             JsonReporter().generate(results, "Smoke Test", self.device_name, json_path, device_info)
-            logger.info(f"JSON report: {json_path}")
+            logger.info(f"JSON report: file://{json_path.resolve()}")
 
         if "html" in formats:
             html_path = output_dir / f"{self.device_name}_report.html"
             HtmlReporter().generate(results, "Smoke Test", self.device_name, html_path, device_info)
-            logger.info(f"HTML report: {html_path}")
+            logger.info(f"HTML report: file://{html_path.resolve()}")
