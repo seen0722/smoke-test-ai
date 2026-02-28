@@ -1,0 +1,10 @@
+click>=8.1
+rich>=13.0
+pyyaml>=6.0
+pyusb>=1.2
+opencv-python-headless>=4.8
+httpx>=0.25
+jinja2>=3.1
+Pillow>=10.0
+pytest>=7.0
+pytest-mock>=3.10
