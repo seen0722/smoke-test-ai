@@ -8,8 +8,9 @@ llm:
   max_retries: 3
 
 wifi:
-  ssid: "TestLab-5G"
-  password: ""
+  ssid: "Billy_iHome"
+  password: "${WIFI_PASSWORD}"
+  security: "wpa2"              # open | wpa2 | wpa3 | owe | wep
 
 reporting:
   formats: ["cli", "json"]

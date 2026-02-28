@@ -102,11 +102,7 @@ class Orchestrator:
             logger.error("Device not found via ADB")
             return []
 
-        wifi_cfg = self.settings.get("wifi", {})
-        if wifi_cfg.get("ssid"):
-            adb.connect_wifi(wifi_cfg["ssid"], wifi_cfg.get("password", ""))
-
-        # FBE unlock: check if user storage is locked
+        # FBE unlock first: must unlock before WiFi and other services work
         user_state = adb.get_user_state()
         if user_state == "RUNNING_LOCKED":
             logger.warning("User storage is locked (FBE). Attempting unlock...")
@@ -117,6 +113,18 @@ class Orchestrator:
                 logger.error(
                     "Failed to unlock device. Many services (NFC, Launcher, etc.) "
                     "will not start until user storage is unlocked."
+                )
+
+        # WiFi connection
+        wifi_cfg = self.settings.get("wifi", {})
+        if wifi_cfg.get("ssid"):
+            if adb.is_wifi_connected():
+                logger.info("WiFi already connected, skipping")
+            else:
+                adb.connect_wifi(
+                    wifi_cfg["ssid"],
+                    wifi_cfg.get("password", ""),
+                    security=wifi_cfg.get("security", "wpa2"),
                 )
 
         adb.shell("settings put global stay_on_while_plugged_in 3")

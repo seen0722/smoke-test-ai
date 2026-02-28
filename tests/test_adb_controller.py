@@ -101,3 +101,39 @@ def test_unlock_keyguard_fail(mock_run, mock_sleep, adb):
     mock_run.return_value = MagicMock(returncode=0, stdout="    State: RUNNING_LOCKED\n", stderr="")
     result = adb.unlock_keyguard(pin="9999")
     assert result is False
+
+
+@patch("smoke_test_ai.drivers.adb_controller.time.sleep")
+@patch("smoke_test_ai.drivers.adb_controller.subprocess.run")
+def test_enable_wifi_already_enabled(mock_run, mock_sleep, adb):
+    mock_run.return_value = MagicMock(returncode=0, stdout="Wi-Fi is enabled\n", stderr="")
+    assert adb.enable_wifi() is True
+
+
+@patch("smoke_test_ai.drivers.adb_controller.time.sleep")
+@patch("smoke_test_ai.drivers.adb_controller.subprocess.run")
+def test_enable_wifi_needs_enabling(mock_run, mock_sleep, adb):
+    # First call: WiFi is disabled; second call: svc wifi enable; third call: WiFi is enabled
+    mock_run.side_effect = [
+        MagicMock(returncode=0, stdout="Wi-Fi is disabled\n", stderr=""),  # check state
+        MagicMock(returncode=0, stdout="", stderr=""),  # svc wifi enable
+        MagicMock(returncode=0, stdout="Wi-Fi is enabled\n", stderr=""),  # check again
+    ]
+    assert adb.enable_wifi() is True
+
+
+@patch("smoke_test_ai.drivers.adb_controller.time.sleep")
+@patch("smoke_test_ai.drivers.adb_controller.subprocess.run")
+def test_connect_wifi_enables_first(mock_run, mock_sleep, adb):
+    """Verify connect_wifi calls enable_wifi before connecting."""
+    mock_run.side_effect = [
+        # enable_wifi: check → already enabled
+        MagicMock(returncode=0, stdout="Wi-Fi is enabled\n", stderr=""),
+        # connect-network command
+        MagicMock(returncode=0, stdout="", stderr=""),
+        # is_wifi_connected: dumpsys wifi
+        MagicMock(returncode=0, stdout="Wi-Fi is enabled\n", stderr=""),
+        # is_wifi_connected: ip route
+        MagicMock(returncode=0, stdout="default via 192.168.1.1 dev wlan0\n", stderr=""),
+    ]
+    assert adb.connect_wifi("TestSSID", "pass123") is True
