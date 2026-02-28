@@ -135,6 +135,9 @@ class Orchestrator:
         adb.shell("settings put system screen_off_timeout 1800000")
         adb.shell("input keyevent KEYCODE_WAKEUP")
 
+        # Collect device info for reports
+        device_info = adb.get_device_info()
+
         # Stage 3: Test Execute
         if suite_config:
             logger.info("=== Stage 3: Test Execute ===")
@@ -156,24 +159,24 @@ class Orchestrator:
 
         # Stage 4: Report
         logger.info("=== Stage 4: Report ===")
-        self._generate_reports(results)
+        self._generate_reports(results, device_info=device_info)
 
         return results
 
-    def _generate_reports(self, results: list[TestResult]) -> None:
+    def _generate_reports(self, results: list[TestResult], device_info: dict | None = None) -> None:
         report_cfg = self.settings.get("reporting", {})
         formats = report_cfg.get("formats", ["cli"])
         output_dir = Path(report_cfg.get("output_dir", "results/"))
 
         if "cli" in formats:
-            CliReporter().print_results(results, "Smoke Test", self.device_name)
+            CliReporter().print_results(results, "Smoke Test", self.device_name, device_info)
 
         if "json" in formats:
             json_path = output_dir / f"{self.device_name}_results.json"
-            JsonReporter().generate(results, "Smoke Test", self.device_name, json_path)
+            JsonReporter().generate(results, "Smoke Test", self.device_name, json_path, device_info)
             logger.info(f"JSON report: {json_path}")
 
         if "html" in formats:
             html_path = output_dir / f"{self.device_name}_report.html"
-            HtmlReporter().generate(results, "Smoke Test", self.device_name, html_path)
+            HtmlReporter().generate(results, "Smoke Test", self.device_name, html_path, device_info)
             logger.info(f"HTML report: {html_path}")

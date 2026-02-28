@@ -30,6 +30,37 @@ class AdbController:
         result = self.shell(f"getprop {prop}")
         return result.stdout.strip()
 
+    def get_device_info(self) -> dict:
+        """Collect device SW and HW information via getprop."""
+        props = {
+            "model": "ro.product.model",
+            "brand": "ro.product.brand",
+            "manufacturer": "ro.product.manufacturer",
+            "device": "ro.product.device",
+            "hardware": "ro.hardware",
+            "board": "ro.product.board",
+            "platform": "ro.board.platform",
+            "cpu_abi": "ro.product.cpu.abi",
+            "android_version": "ro.build.version.release",
+            "sdk_version": "ro.build.version.sdk",
+            "security_patch": "ro.build.version.security_patch",
+            "build_id": "ro.build.display.id",
+            "build_type": "ro.build.type",
+            "build_fingerprint": "ro.build.fingerprint",
+            "kernel_version": "",
+            "serial": "",
+        }
+        info = {}
+        for key, prop in props.items():
+            if prop:
+                info[key] = self.getprop(prop)
+            elif key == "kernel_version":
+                result = self.shell("uname -r")
+                info[key] = result.stdout.strip()
+            elif key == "serial":
+                info[key] = self.serial or self.getprop("ro.serialno")
+        return info
+
     def is_connected(self) -> bool:
         result = self._run("devices")
         if self.serial:

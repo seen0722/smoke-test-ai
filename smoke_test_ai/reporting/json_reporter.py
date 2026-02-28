@@ -12,12 +12,14 @@ class JsonReporter:
         suite_name: str,
         device_name: str,
         output_path: Path,
+        device_info: dict | None = None,
     ) -> None:
         passed = sum(1 for r in results if r.passed)
         data = {
             "suite_name": suite_name,
             "device_name": device_name,
             "timestamp": datetime.now().isoformat(),
+            "device_info": device_info or {},
             "summary": {
                 "total": len(results),
                 "passed": passed,

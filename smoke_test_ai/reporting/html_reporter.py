@@ -18,6 +18,7 @@ class HtmlReporter:
         suite_name: str,
         device_name: str,
         output_path: Path,
+        device_info: dict | None = None,
     ) -> None:
         passed = sum(1 for r in results if r.passed)
         template = self.env.get_template("report.html")
@@ -29,6 +30,7 @@ class HtmlReporter:
             passed=passed,
             failed=len(results) - passed,
             results=[r.to_dict() for r in results],
+            device_info=device_info or {},
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(html)

@@ -12,7 +12,42 @@ class CliReporter:
         results: list[TestResult],
         suite_name: str,
         device_name: str,
+        device_info: dict | None = None,
     ) -> None:
+        if device_info:
+            console.print("\n[bold]Device Information[/]")
+            hw_keys = [
+                ("model", "Model"),
+                ("brand", "Brand"),
+                ("manufacturer", "Manufacturer"),
+                ("device", "Device"),
+                ("hardware", "Hardware"),
+                ("board", "Board"),
+                ("platform", "Platform"),
+                ("cpu_abi", "CPU ABI"),
+                ("serial", "Serial"),
+            ]
+            sw_keys = [
+                ("android_version", "Android Version"),
+                ("sdk_version", "SDK Level"),
+                ("security_patch", "Security Patch"),
+                ("build_id", "Build ID"),
+                ("build_type", "Build Type"),
+                ("build_fingerprint", "Fingerprint"),
+                ("kernel_version", "Kernel"),
+            ]
+            console.print("  [bold cyan]Hardware:[/]")
+            for key, label in hw_keys:
+                val = device_info.get(key, "")
+                if val:
+                    console.print(f"    {label}: {val}")
+            console.print("  [bold cyan]Software:[/]")
+            for key, label in sw_keys:
+                val = device_info.get(key, "")
+                if val:
+                    console.print(f"    {label}: {val}")
+            console.print()
+
         table = Table(title=f"Smoke Test Results: {suite_name} @ {device_name}")
         table.add_column("ID", style="dim")
         table.add_column("Test Name")

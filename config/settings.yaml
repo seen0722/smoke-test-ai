@@ -13,7 +13,7 @@ wifi:
   security: "wpa2"              # open | wpa2 | wpa3 | owe | wep
 
 reporting:
-  formats: ["cli", "json"]
+  formats: ["cli", "json", "html"]
   output_dir: "results/"
   screenshots: true
 
