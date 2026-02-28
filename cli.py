@@ -100,26 +100,28 @@ def reset_test(device, suite, serial, config_dir, boot_timeout):
         console.print("[red]Device not connected. Cannot factory reset.[/]")
         raise SystemExit(1)
     adb.factory_reset()
-    console.print("Factory reset initiated. Waiting for reboot...")
+    console.print("Factory reset initiated.")
 
-    # Wait for device to disconnect (reset in progress)
-    import time
-    time.sleep(10)
+    # Prompt user to unplug USB to avoid offline charging mode
+    console.print("\n[bold cyan]>>> Please UNPLUG the USB cable now <<<[/]")
+    console.print("Wait for the device to fully boot into the home screen,")
+    console.print("then plug the USB cable back in.")
+    click.pause("Press any key after USB is reconnected...")
 
-    # Wait for device to come back and boot
-    console.print(f"Waiting for device to boot (timeout: {boot_timeout}s)...")
-    if not adb.wait_for_boot(timeout=boot_timeout):
-        console.print("[red]Device did not boot after factory reset[/]")
+    # Wait for device to come back via ADB
+    console.print(f"\nWaiting for ADB connection (timeout: {boot_timeout}s)...")
+    if not adb.wait_for_device(timeout=boot_timeout):
+        console.print("[red]Device not found via ADB[/]")
         raise SystemExit(1)
-    console.print("[green]Device booted successfully after factory reset[/]\n")
+    console.print("[green]Device connected via ADB[/]\n")
 
-    # Run full pipeline (skip flash, skip setup wizard for userdebug)
+    # Run full pipeline (skip flash, run setup wizard skip + bootstrap)
     orch = Orchestrator(settings=settings, device_config=device_config)
     results = orch.run(
         serial=serial,
         suite_config=suite_config,
         skip_flash=True,
-        skip_setup=True,
+        skip_setup=False,
     )
 
     passed = sum(1 for r in results if r.passed)
