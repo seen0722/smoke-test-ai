@@ -95,5 +95,27 @@ class AoaHidDriver:
         report = struct.pack("<BHH", 0x00, abs_x, abs_y)
         self.send_hid_event(hid_id, report)
 
+    def wake_screen(self, keyboard_hid_id: int) -> None:
+        """Wake screen using mouse movement first, then Power key as fallback.
+
+        Strategy:
+        1. Send a small mouse movement — wakes screen without side effects
+           on most Android devices (acts like user activity).
+        2. If caller needs stronger wake, use wake_screen_power() instead.
+        """
+        logger.info("Waking screen via HID mouse movement")
+        # Small mouse touch-and-release at center to trigger user activity
+        report = struct.pack("<BHH", 0x01, 5000, 5000)
+        self.send_hid_event(keyboard_hid_id, report)
+        time.sleep(0.05)
+        report = struct.pack("<BHH", 0x00, 5000, 5000)
+        self.send_hid_event(keyboard_hid_id, report)
+
+    def wake_screen_power(self, keyboard_hid_id: int) -> None:
+        """Send HID Power key (0x66) to toggle screen. Use with caution —
+        this is a toggle: it turns screen OFF if already ON."""
+        logger.info("Sending HID Power key to toggle screen")
+        self.send_key(keyboard_hid_id, 0x66)
+
     def close(self) -> None:
         self._device = None

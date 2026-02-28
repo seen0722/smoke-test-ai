@@ -50,3 +50,100 @@ test_suite:
       type: "adb_shell"
       command: "dumpsys audio | grep 'stream_MUSIC'"
       expected_contains: "stream_MUSIC"
+
+    # --- GPS ---
+    - id: "gps_provider"
+      name: "GPS Provider 可用"
+      type: "adb_shell"
+      command: "dumpsys location | grep 'gps'"
+      expected_contains: "gps"
+
+    - id: "gps_enabled"
+      name: "GPS 定位已開啟"
+      type: "adb_shell"
+      command: "settings get secure location_providers_allowed"
+      expected_contains: "gps"
+
+    # --- 藍牙 ---
+    - id: "bluetooth_enabled"
+      name: "藍牙已啟用"
+      type: "adb_shell"
+      command: "dumpsys bluetooth_manager | grep 'enabled'"
+      expected_contains: "enabled"
+
+    - id: "bluetooth_adapter"
+      name: "藍牙 Adapter 存在"
+      type: "adb_shell"
+      command: "dumpsys bluetooth_manager | grep 'name:'"
+      expected_pattern: "name:.*"
+
+    - id: "bluetooth_address"
+      name: "藍牙 MAC 位址有效"
+      type: "adb_shell"
+      command: "dumpsys bluetooth_manager | grep 'address:'"
+      expected_pattern: "address: [0-9A-Fa-f]{2}:"
+
+    # --- NFC ---
+    - id: "nfc_enabled"
+      name: "NFC 已啟用"
+      type: "adb_shell"
+      command: "dumpsys nfc | grep 'mState='"
+      expected_contains: "ON"
+
+    - id: "nfc_adapter"
+      name: "NFC Adapter 存在"
+      type: "adb_shell"
+      command: "dumpsys nfc | grep 'mIsNdefPushEnabled'"
+      expected_pattern: "mIsNdefPushEnabled=.*"
+
+    # --- 感測器 ---
+    - id: "sensor_accelerometer"
+      name: "加速度計感測器"
+      type: "adb_shell"
+      command: "dumpsys sensorservice | grep -i accelerometer"
+      expected_pattern: ".*[Aa]ccelerometer.*"
+
+    - id: "sensor_gyroscope"
+      name: "陀螺儀感測器"
+      type: "adb_shell"
+      command: "dumpsys sensorservice | grep -i gyroscope"
+      expected_pattern: ".*[Gg]yroscope.*"
+
+    # --- 儲存與記憶體 ---
+    - id: "storage_available"
+      name: "內部儲存可用"
+      type: "adb_shell"
+      command: "df /data | tail -1"
+      expected_pattern: ".*[0-9]+.*"
+
+    - id: "memory_available"
+      name: "記憶體資訊正常"
+      type: "adb_shell"
+      command: "cat /proc/meminfo | grep MemTotal"
+      expected_pattern: "MemTotal:\\s+[0-9]+ kB"
+
+    # --- 螢幕亮度與自動旋轉 ---
+    - id: "brightness_settable"
+      name: "螢幕亮度可設定"
+      type: "adb_shell"
+      command: "settings get system screen_brightness"
+      expected_pattern: "^[0-9]+$"
+
+    - id: "auto_rotate"
+      name: "自動旋轉功能"
+      type: "adb_shell"
+      command: "settings get system accelerometer_rotation"
+      expected_pattern: "^[01]$"
+
+    # --- USB 與充電 ---
+    - id: "battery_status"
+      name: "電池狀態正常"
+      type: "adb_shell"
+      command: "dumpsys battery | grep 'status'"
+      expected_pattern: "status: [2-5]"
+
+    - id: "usb_connected"
+      name: "USB 連線狀態"
+      type: "adb_shell"
+      command: "dumpsys battery | grep 'USB powered'"
+      expected_contains: "true"

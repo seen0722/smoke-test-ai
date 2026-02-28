@@ -1,4 +1,5 @@
 import time
+import numpy as np
 from smoke_test_ai.drivers.aoa_hid import AoaHidDriver
 from smoke_test_ai.drivers.screen_capture.base import ScreenCapture
 from smoke_test_ai.ai.visual_analyzer import VisualAnalyzer
@@ -9,6 +10,8 @@ logger = get_logger(__name__)
 
 
 class SetupWizardAgent:
+    SCREEN_OFF_BRIGHTNESS_THRESHOLD = 10
+
     def __init__(
         self,
         hid: AoaHidDriver,
@@ -18,6 +21,7 @@ class SetupWizardAgent:
         screen_w: int = 1080,
         screen_h: int = 2400,
         hid_id: int = 2,
+        keyboard_hid_id: int = 1,
         max_steps: int = 30,
         timeout: int = 300,
     ):
@@ -28,12 +32,14 @@ class SetupWizardAgent:
         self.screen_w = screen_w
         self.screen_h = screen_h
         self.hid_id = hid_id
+        self.keyboard_hid_id = keyboard_hid_id
         self.max_steps = max_steps
         self.timeout = timeout
 
     def run(self) -> bool:
         logger.info("Starting Setup Wizard automation...")
         deadline = time.time() + self.timeout
+        consecutive_dark_frames = 0
 
         for step in range(self.max_steps):
             if time.time() > deadline:
@@ -52,6 +58,21 @@ class SetupWizardAgent:
                 time.sleep(3)
                 continue
 
+            if self._is_screen_off(image):
+                consecutive_dark_frames += 1
+                if consecutive_dark_frames <= 2:
+                    # First attempts: mouse movement (safe, no side effects)
+                    logger.warning(f"Step {step}: Screen appears off, waking via mouse movement...")
+                    self.hid.wake_screen(self.hid_id)
+                else:
+                    # Persistent dark screen: escalate to Power key
+                    logger.warning(f"Step {step}: Screen still off after {consecutive_dark_frames} attempts, using Power key...")
+                    self.hid.wake_screen_power(self.keyboard_hid_id)
+                    consecutive_dark_frames = 0  # Reset to avoid rapid Power key toggling
+                time.sleep(2)
+                continue
+
+            consecutive_dark_frames = 0
             analysis = self.analyzer.analyze_setup_wizard(image)
             logger.info(
                 f"Step {step}: state={analysis['screen_state']} "
@@ -100,3 +121,8 @@ class SetupWizardAgent:
             wait_sec = action.get("wait_seconds", 3)
             logger.info(f"  Action: wait {wait_sec}s")
             time.sleep(wait_sec)
+
+    def _is_screen_off(self, image: np.ndarray) -> bool:
+        """Detect if screen is off by checking average brightness."""
+        mean_brightness = np.mean(image)
+        return mean_brightness < self.SCREEN_OFF_BRIGHTNESS_THRESHOLD

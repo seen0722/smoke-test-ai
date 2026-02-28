@@ -91,6 +91,8 @@ class Orchestrator:
             adb.connect_wifi(wifi_cfg["ssid"], wifi_cfg.get("password", ""))
 
         adb.shell("settings put global stay_on_while_plugged_in 3")
+        adb.shell("settings put system screen_off_timeout 1800000")
+        adb.shell("input keyevent KEYCODE_WAKEUP")
 
         # Stage 3: Test Execute
         if suite_config:
