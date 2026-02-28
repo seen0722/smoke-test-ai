@@ -13,6 +13,7 @@ from smoke_test_ai.core.test_runner import TestRunner, TestResult
 from smoke_test_ai.reporting.cli_reporter import CliReporter
 from smoke_test_ai.reporting.json_reporter import JsonReporter
 from smoke_test_ai.reporting.html_reporter import HtmlReporter
+from smoke_test_ai.reporting.test_plan_reporter import TestPlanReporter
 from smoke_test_ai.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -138,6 +139,9 @@ class Orchestrator:
         # Collect device info for reports
         device_info = adb.get_device_info()
 
+        # Store suite_config for report generation
+        self._suite_config = suite_config
+
         # Stage 3: Test Execute
         if suite_config:
             logger.info("=== Stage 3: Test Execute ===")
@@ -185,3 +189,8 @@ class Orchestrator:
             html_path = output_dir / f"{self.device_name}_report.html"
             HtmlReporter().generate(results, "Smoke Test", self.device_name, html_path, device_info)
             logger.info(f"HTML report: file://{html_path.resolve()}")
+
+            if getattr(self, "_suite_config", None):
+                plan_path = output_dir / f"{self.device_name}_test_plan.html"
+                TestPlanReporter().generate(self._suite_config, plan_path)
+                logger.info(f"Test plan: file://{plan_path.resolve()}")
