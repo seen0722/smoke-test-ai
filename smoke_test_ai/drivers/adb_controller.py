@@ -56,6 +56,30 @@ class AdbController:
     def connect_wifi(self, ssid: str, password: str) -> subprocess.CompletedProcess:
         return self.shell(f'cmd wifi connect-network "{ssid}" wpa2 "{password}"', timeout=30)
 
+    def get_user_state(self) -> str:
+        """Get user storage state: RUNNING_UNLOCKED, RUNNING_LOCKED, etc."""
+        result = self.shell("dumpsys user | grep 'State:'")
+        for line in result.stdout.strip().splitlines():
+            if "State:" in line:
+                return line.split("State:")[1].strip()
+        return "UNKNOWN"
+
+    def unlock_keyguard(self, pin: str | None = None) -> bool:
+        """Unlock the keyguard/lockscreen. Returns True if unlocked."""
+        self.shell("input keyevent KEYCODE_WAKEUP")
+        time.sleep(1)
+        # Swipe up to dismiss lockscreen / show PIN entry
+        self.shell("input swipe 540 1800 540 600")
+        time.sleep(1)
+        if pin:
+            self.shell(f"input text {pin}")
+            time.sleep(0.5)
+            self.shell("input keyevent KEYCODE_ENTER")
+            time.sleep(2)
+        # Verify unlock
+        state = self.get_user_state()
+        return state == "RUNNING_UNLOCKED"
+
     def reboot(self, mode: str = "") -> subprocess.CompletedProcess:
         if mode:
             return self._run("reboot", mode)

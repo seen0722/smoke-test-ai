@@ -4,6 +4,7 @@ device:
   screen_resolution: [1080, 2400]
   has_sim: true
   has_dp_output: false
+  lock_pin: "0000"              # FBE unlock PIN (omit if no PIN set)
 
   flash:
     profile: "fastboot"

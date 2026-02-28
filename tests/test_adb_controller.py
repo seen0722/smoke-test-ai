@@ -64,3 +64,40 @@ def test_install_apk(mock_run, adb):
     mock_run.return_value = MagicMock(returncode=0, stdout="Success", stderr="")
     result = adb.install("/path/to/app.apk")
     assert result.returncode == 0
+
+
+@patch("smoke_test_ai.drivers.adb_controller.subprocess.run")
+def test_get_user_state_unlocked(mock_run, adb):
+    mock_run.return_value = MagicMock(returncode=0, stdout="    State: RUNNING_UNLOCKED\n", stderr="")
+    assert adb.get_user_state() == "RUNNING_UNLOCKED"
+
+
+@patch("smoke_test_ai.drivers.adb_controller.subprocess.run")
+def test_get_user_state_locked(mock_run, adb):
+    mock_run.return_value = MagicMock(returncode=0, stdout="    State: RUNNING_LOCKED\n", stderr="")
+    assert adb.get_user_state() == "RUNNING_LOCKED"
+
+
+@patch("smoke_test_ai.drivers.adb_controller.time.sleep")
+@patch("smoke_test_ai.drivers.adb_controller.subprocess.run")
+def test_unlock_keyguard_with_pin(mock_run, mock_sleep, adb):
+    # First calls: wakeup, swipe, input text, enter. Last call: get_user_state
+    mock_run.return_value = MagicMock(returncode=0, stdout="    State: RUNNING_UNLOCKED\n", stderr="")
+    result = adb.unlock_keyguard(pin="0000")
+    assert result is True
+
+
+@patch("smoke_test_ai.drivers.adb_controller.time.sleep")
+@patch("smoke_test_ai.drivers.adb_controller.subprocess.run")
+def test_unlock_keyguard_no_pin(mock_run, mock_sleep, adb):
+    mock_run.return_value = MagicMock(returncode=0, stdout="    State: RUNNING_UNLOCKED\n", stderr="")
+    result = adb.unlock_keyguard(pin=None)
+    assert result is True
+
+
+@patch("smoke_test_ai.drivers.adb_controller.time.sleep")
+@patch("smoke_test_ai.drivers.adb_controller.subprocess.run")
+def test_unlock_keyguard_fail(mock_run, mock_sleep, adb):
+    mock_run.return_value = MagicMock(returncode=0, stdout="    State: RUNNING_LOCKED\n", stderr="")
+    result = adb.unlock_keyguard(pin="9999")
+    assert result is False

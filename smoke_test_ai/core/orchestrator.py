@@ -90,6 +90,19 @@ class Orchestrator:
         if wifi_cfg.get("ssid"):
             adb.connect_wifi(wifi_cfg["ssid"], wifi_cfg.get("password", ""))
 
+        # FBE unlock: check if user storage is locked
+        user_state = adb.get_user_state()
+        if user_state == "RUNNING_LOCKED":
+            logger.warning("User storage is locked (FBE). Attempting unlock...")
+            pin = self.device_config.get("lock_pin")
+            if adb.unlock_keyguard(pin=pin):
+                logger.info("Device unlocked successfully — user storage is now accessible")
+            else:
+                logger.error(
+                    "Failed to unlock device. Many services (NFC, Launcher, etc.) "
+                    "will not start until user storage is unlocked."
+                )
+
         adb.shell("settings put global stay_on_while_plugged_in 3")
         adb.shell("settings put system screen_off_timeout 1800000")
         adb.shell("input keyevent KEYCODE_WAKEUP")
