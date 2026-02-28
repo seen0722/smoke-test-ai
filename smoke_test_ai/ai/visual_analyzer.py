@@ -1,9 +1,18 @@
 import json
+import re
 import numpy as np
 from smoke_test_ai.ai.llm_client import LlmClient
 from smoke_test_ai.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _extract_json(text: str) -> dict:
+    """Extract JSON from LLM response, stripping markdown code blocks if present."""
+    # Strip markdown code blocks: ```json ... ``` or ``` ... ```
+    cleaned = re.sub(r"^```(?:json)?\s*\n?", "", text.strip())
+    cleaned = re.sub(r"\n?```\s*$", "", cleaned)
+    return json.loads(cleaned)
 
 SETUP_WIZARD_PROMPT = """You are an Android Setup Wizard automation assistant.
 Analyze this screenshot and determine:
@@ -27,7 +36,7 @@ class VisualAnalyzer:
     def analyze_setup_wizard(self, image: np.ndarray) -> dict:
         response = self.llm.chat_vision(SETUP_WIZARD_PROMPT, image)
         try:
-            return json.loads(response)
+            return _extract_json(response)
         except json.JSONDecodeError:
             logger.warning(f"Failed to parse LLM response: {response}")
             return {"screen_state": "unknown", "completed": False, "action": {"type": "wait", "wait_seconds": 3}, "confidence": 0.0}
@@ -36,7 +45,7 @@ class VisualAnalyzer:
         prompt = TEST_SCREENSHOT_PROMPT.format(question=question)
         response = self.llm.chat_vision(prompt, image)
         try:
-            return json.loads(response)
+            return _extract_json(response)
         except json.JSONDecodeError:
             logger.warning(f"Failed to parse LLM response: {response}")
             return {"pass": False, "reason": f"LLM parse error: {response}"}

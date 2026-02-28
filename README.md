@@ -63,6 +63,7 @@ device:
   name: "My-Device"
   build_type: "user"           # user | userdebug
   screen_resolution: [1080, 2400]
+  lock_pin: "0000"             # FBE unlock PIN (omit if no PIN)
   flash:
     profile: "fastboot"
   screen_capture:
@@ -135,7 +136,7 @@ smoke-test suites list
 | 感測器 | 加速度計、陀螺儀 |
 | 儲存/記憶體 | 內部儲存、記憶體資訊 |
 | 螢幕 | 螢幕亮度、自動旋轉 |
-| USB/電池 | 電池狀態、USB 連線 |
+| USB/電池 | 電池狀態、充電連線 |
 
 ### 自訂測試項目
 
@@ -160,7 +161,7 @@ Stage 1: Setup Wizard (Pre-ADB)
     │  自動完成語言選擇、WiFi 設定、Google 登入跳過等步驟
     ▼
 Stage 2: ADB Bootstrap
-    │  等待 ADB 連線 → WiFi 連線 → 螢幕常亮 → 喚醒螢幕
+    │  等待 ADB 連線 → FBE 解鎖 → WiFi 連線 → 螢幕常亮 → 喚醒螢幕
     ▼
 Stage 3: Test Execute
     │  依 YAML 測試套件逐項執行 23 項測試
@@ -178,6 +179,7 @@ user build 下 ADB 預設關閉，螢幕可能自動關閉導致測試失敗。�
 | Pre-ADB | HID 滑鼠動作 | 安全喚醒，不會意外關閉螢幕 |
 | Pre-ADB | HID Power 鍵 (fallback) | 連續 2 次失敗後升級 |
 | Pre-ADB | Webcam 亮度偵測 | 平均亮度 < 10 判定螢幕關閉 |
+| Post-ADB | FBE 自動解鎖 | 偵測 `RUNNING_LOCKED` 狀態，自動輸入 PIN 解鎖 |
 | Post-ADB | `stay_on_while_plugged_in` | USB 充電時螢幕常亮 |
 | Post-ADB | `screen_off_timeout 30min` | 螢幕 timeout 設為 30 分鐘 |
 | Post-ADB | `KEYCODE_WAKEUP` | 測試前立即喚醒 |
@@ -188,7 +190,7 @@ user build 下 ADB 預設關閉，螢幕可能自動關閉導致測試失敗。�
 # 安裝開發依賴
 pip install -e ".[dev]"
 
-# 執行測試 (46 個單元測試，全 Mock，不需硬體)
+# 執行測試 (51 個單元測試，全 Mock，不需硬體)
 pytest tests/ -v
 
 # 執行單一模組測試
@@ -207,7 +209,7 @@ pytest tests/test_adb_controller.py -v
 | 設定檔 | PyYAML |
 | CLI | Click + Rich |
 | 報告 | Jinja2 (HTML) + JSON |
-| 測試 | pytest + pytest-mock (46 tests) |
+| 測試 | pytest + pytest-mock (51 tests) |
 
 ## License
 

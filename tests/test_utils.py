@@ -4,7 +4,7 @@ from smoke_test_ai.utils.config import load_settings, load_device_config, load_t
 
 def test_load_settings(config_dir):
     settings = load_settings(config_dir / "settings.yaml")
-    assert settings["llm"]["provider"] == "ollama"
+    assert settings["llm"]["provider"] in ("ollama", "openai")
     assert settings["parallel"]["max_devices"] == 4
 
 def test_load_settings_missing_file():

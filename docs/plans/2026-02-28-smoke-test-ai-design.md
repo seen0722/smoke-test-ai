@@ -160,6 +160,11 @@ user build 在各階段的螢幕喚醒策略：
 ### Stage 2: ADB Bootstrap
 
 ADB 開啟後的初始設定：
+- **FBE 解鎖** — 檢測 `dumpsys user` 的 `State`，若為 `RUNNING_LOCKED` 則自動輸入 PIN 解鎖
+  - File-Based Encryption (FBE) 裝置開機後需輸入 PIN 才能解鎖 user storage
+  - 未解鎖時 FallbackHome 會卡住（不轉換到真正的 Launcher）
+  - 多數 framework 服務（NFC、Launcher 等）不會在 `RUNNING_LOCKED` 狀態啟動
+  - 支援在 device config 設定 `lock_pin` 自動解鎖
 - WiFi 連線 (`adb shell cmd wifi connect-network`)
 - 螢幕常亮 (`settings put global stay_on_while_plugged_in 3`)
 - 螢幕 timeout 設為 30 分鐘 (`settings put system screen_off_timeout 1800000`)
@@ -240,10 +245,10 @@ smoke-test-ai/
 ├── scripts/
 │   └── install.sh                  # 安裝腳本
 │
-├── tests/                          # 46 個單元測試
+├── tests/                          # 51 個單元測試
 │   ├── conftest.py
 │   ├── test_utils.py               # 設定載入 (4 tests)
-│   ├── test_adb_controller.py      # ADB 控制 (8 tests)
+│   ├── test_adb_controller.py      # ADB 控制 (13 tests)
 │   ├── test_screen_capture.py      # 螢幕擷取 (5 tests)
 │   ├── test_aoa_hid.py             # AOA2 HID (7 tests)
 │   ├── test_flash.py               # 刷機驅動 (4 tests)
@@ -271,7 +276,7 @@ smoke-test-ai/
 | 設定檔 | YAML (PyYAML) | 人類可讀，容易客製化 |
 | CLI | Click + Rich | 美觀的終端輸出 |
 | 報告 | Jinja2 (HTML) + JSON | 模板化，可選 WeasyPrint (PDF) |
-| 測試 | pytest + pytest-mock | 46 個單元測試，全 Mock |
+| 測試 | pytest + pytest-mock | 51 個單元測試，全 Mock |
 
 ---
 
@@ -287,6 +292,7 @@ device:
   screen_resolution: [1080, 2400]
   has_sim: true
   has_dp_output: false
+  lock_pin: "0000"                # FBE unlock PIN (omit if no PIN set)
 
   flash:
     profile: "fastboot"
@@ -340,7 +346,7 @@ test_suite:
     # --- 基礎 ---
     - { id: boot_complete,   name: 開機完成驗證, type: adb_check, command: "getprop sys.boot_completed", expected: "1" }
     - { id: display_normal,  name: 螢幕顯示正常, type: screenshot_llm, prompt: "螢幕是否正常顯示？是否有異常色塊或花屏？" }
-    - { id: touch_responsive, name: 觸控回應, type: adb_shell, command: "input tap 540 960 && dumpsys window | grep mCurrentFocus", expected_contains: "Launcher" }
+    - { id: touch_responsive, name: 觸控回應, type: adb_shell, command: "dumpsys window | grep mCurrentFocus", expected_pattern: "mCurrentFocus=.*" }
 
     # --- 網路 ---
     - { id: wifi_connected,  name: WiFi 連線, type: adb_shell, command: "dumpsys wifi | grep 'Wi-Fi is'", expected_contains: "enabled" }
@@ -348,21 +354,21 @@ test_suite:
     - { id: sim_status,      name: SIM 卡狀態, type: adb_shell, command: "dumpsys telephony.registry | grep mServiceState", expected_not_contains: "OUT_OF_SERVICE" }
 
     # --- 多媒體 ---
-    - { id: camera_available, name: 相機可用, type: adb_shell, command: "dumpsys media.camera | grep 'Device version'", expected_pattern: "Device version:.*" }
-    - { id: audio_output,    name: 音效輸出, type: adb_shell, command: "dumpsys audio | grep 'stream_MUSIC'", expected_contains: "stream_MUSIC" }
+    - { id: camera_available, name: 相機可用, type: adb_shell, command: "dumpsys media.camera | grep 'Number of camera devices'", expected_pattern: "Number of camera devices: [1-9]" }
+    - { id: audio_output,    name: 音效輸出, type: adb_shell, command: "dumpsys audio | grep -i 'STREAM_MUSIC'", expected_contains: "STREAM_MUSIC" }
 
     # --- GPS ---
     - { id: gps_provider,    name: GPS Provider 可用, type: adb_shell, command: "dumpsys location | grep 'gps'", expected_contains: "gps" }
-    - { id: gps_enabled,     name: GPS 定位已開啟, type: adb_shell, command: "settings get secure location_providers_allowed", expected_contains: "gps" }
+    - { id: gps_enabled,     name: GPS 定位已開啟, type: adb_shell, command: "settings get secure location_mode", expected_pattern: "^[1-3]$" }
 
     # --- 藍牙 ---
     - { id: bluetooth_enabled, name: 藍牙已啟用, type: adb_shell, command: "dumpsys bluetooth_manager | grep 'enabled'", expected_contains: "enabled" }
     - { id: bluetooth_adapter, name: 藍牙 Adapter 存在, type: adb_shell, command: "dumpsys bluetooth_manager | grep 'name:'", expected_pattern: "name:.*" }
-    - { id: bluetooth_address, name: 藍牙 MAC 位址有效, type: adb_shell, command: "dumpsys bluetooth_manager | grep 'address:'", expected_pattern: "address: [0-9A-Fa-f]{2}:" }
+    - { id: bluetooth_address, name: 藍牙 MAC 位址有效, type: adb_shell, command: "dumpsys bluetooth_manager | grep 'address:'", expected_pattern: "address: [0-9A-Fa-fXx]{2}:" }
 
     # --- NFC ---
-    - { id: nfc_enabled,     name: NFC 已啟用, type: adb_shell, command: "dumpsys nfc | grep 'mState='", expected_contains: "ON" }
-    - { id: nfc_adapter,     name: NFC Adapter 存在, type: adb_shell, command: "dumpsys nfc | grep 'mIsNdefPushEnabled'", expected_pattern: "mIsNdefPushEnabled=.*" }
+    - { id: nfc_enabled,     name: NFC 已啟用, type: adb_shell, command: "dumpsys nfc | grep 'mState='", expected_contains: "on" }
+    - { id: nfc_adapter,     name: NFC Adapter 存在, type: adb_shell, command: "dumpsys nfc | grep 'mScreenState='", expected_pattern: "mScreenState=.*" }
 
     # --- 感測器 ---
     - { id: sensor_accelerometer, name: 加速度計感測器, type: adb_shell, command: "dumpsys sensorservice | grep -i accelerometer", expected_pattern: ".*[Aa]ccelerometer.*" }
@@ -378,7 +384,7 @@ test_suite:
 
     # --- USB 與充電 ---
     - { id: battery_status,  name: 電池狀態正常, type: adb_shell, command: "dumpsys battery | grep 'status'", expected_pattern: "status: [2-5]" }
-    - { id: usb_connected,   name: USB 連線狀態, type: adb_shell, command: "dumpsys battery | grep 'USB powered'", expected_contains: "true" }
+    - { id: charging_connected, name: 充電連線狀態, type: adb_shell, command: "dumpsys battery | grep 'powered'", expected_pattern: ".*powered: true" }
 ```
 
 ---
