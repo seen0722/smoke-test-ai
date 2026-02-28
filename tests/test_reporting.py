@@ -22,7 +22,10 @@ def sample_results():
             duration=1.2,
         ),
         TestResult(
-            id="t3", name="SIM check", status=TestStatus.PASS, duration=0.3
+            id="t3", name="SIM check", status=TestStatus.SKIP, message="No SIM", duration=0.0
+        ),
+        TestResult(
+            id="t4", name="Crash test", status=TestStatus.ERROR, message="device offline", duration=0.1
         ),
     ]
 
@@ -41,10 +44,12 @@ class TestJsonReporter:
         data = json.loads(output.read_text())
         assert data["suite_name"] == "Basic Smoke"
         assert data["device_name"] == "Product-A"
-        assert len(data["tests"]) == 3
-        assert data["summary"]["total"] == 3
-        assert data["summary"]["passed"] == 2
+        assert len(data["tests"]) == 4
+        assert data["summary"]["total"] == 4
+        assert data["summary"]["passed"] == 1
         assert data["summary"]["failed"] == 1
+        assert data["summary"]["error"] == 1
+        assert data["summary"]["skipped"] == 1
 
 
 class TestHtmlReporter:
@@ -65,3 +70,7 @@ class TestHtmlReporter:
         assert "Product-A" in html
         assert "PASS" in html
         assert "FAIL" in html
+        assert "SKIP" in html
+        assert "ERROR" in html
+        assert "Skipped" in html  # summary card label
+        assert "Error" in html    # summary card label

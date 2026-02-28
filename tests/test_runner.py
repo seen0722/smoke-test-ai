@@ -60,3 +60,108 @@ class TestTestRunner:
         test_case = {"id": "bad", "name": "Bad", "type": "nonexistent"}
         result = runner.run_test(test_case)
         assert result.status == TestStatus.ERROR
+
+    # --- B1: FAIL message contains actual output ---
+    def test_fail_message_contains_actual_output(self, runner, mock_adb):
+        mock_adb.shell.return_value = MagicMock(returncode=0, stdout="some unexpected output\n", stderr="")
+        tc = {"id": "t", "name": "T", "type": "adb_shell", "command": "cmd", "expected_contains": "expected_value"}
+        result = runner.run_test(tc)
+        assert result.status == TestStatus.FAIL
+        assert "actual:" in result.message
+        assert "some unexpected output" in result.message
+
+    def test_fail_pattern_message_contains_actual(self, runner, mock_adb):
+        mock_adb.shell.return_value = MagicMock(returncode=0, stdout="no match here\n", stderr="")
+        tc = {"id": "t", "name": "T", "type": "adb_shell", "command": "cmd", "expected_pattern": "^[0-9]+$"}
+        result = runner.run_test(tc)
+        assert result.status == TestStatus.FAIL
+        assert "actual:" in result.message
+
+    def test_fail_not_contains_message_has_actual(self, runner, mock_adb):
+        mock_adb.shell.return_value = MagicMock(returncode=0, stdout="BAD_VALUE present\n", stderr="")
+        tc = {"id": "t", "name": "T", "type": "adb_shell", "command": "cmd", "expected_not_contains": "BAD_VALUE"}
+        result = runner.run_test(tc)
+        assert result.status == TestStatus.FAIL
+        assert "actual:" in result.message
+
+    # --- B2: requires / device_capability ---
+    def test_requires_capability_skip(self, mock_adb):
+        runner = TestRunner(adb=mock_adb, device_capabilities={"has_sim": False})
+        tc = {"id": "sim", "name": "SIM", "type": "adb_shell", "command": "cmd",
+              "expected_contains": "ok", "requires": {"device_capability": "has_sim"}}
+        result = runner.run_test(tc)
+        assert result.status == TestStatus.SKIP
+        assert "has_sim" in result.message
+
+    def test_requires_capability_pass(self, mock_adb):
+        mock_adb.shell.return_value = MagicMock(returncode=0, stdout="ok\n", stderr="")
+        runner = TestRunner(adb=mock_adb, device_capabilities={"has_sim": True})
+        tc = {"id": "sim", "name": "SIM", "type": "adb_shell", "command": "cmd",
+              "expected_contains": "ok", "requires": {"device_capability": "has_sim"}}
+        result = runner.run_test(tc)
+        assert result.status == TestStatus.PASS
+
+    def test_requires_missing_capability_skip(self, mock_adb):
+        runner = TestRunner(adb=mock_adb, device_capabilities={})
+        tc = {"id": "dp", "name": "DP", "type": "adb_shell", "command": "cmd",
+              "expected_contains": "ok", "requires": {"device_capability": "has_dp_output"}}
+        result = runner.run_test(tc)
+        assert result.status == TestStatus.SKIP
+
+    # --- B3: retry ---
+    def test_retry_on_fail(self, mock_adb):
+        # First call fails, second passes
+        mock_adb.shell.side_effect = [
+            MagicMock(returncode=0, stdout="bad\n", stderr=""),
+            MagicMock(returncode=0, stdout="ok\n", stderr=""),
+        ]
+        runner = TestRunner(adb=mock_adb)
+        tc = {"id": "r", "name": "Retry", "type": "adb_shell", "command": "cmd",
+              "expected_contains": "ok", "retry": 2, "retry_delay": 0}
+        result = runner.run_test(tc)
+        assert result.status == TestStatus.PASS
+        assert mock_adb.shell.call_count == 2
+
+    def test_no_retry_on_error(self, mock_adb):
+        mock_adb.shell.side_effect = Exception("device offline")
+        runner = TestRunner(adb=mock_adb)
+        tc = {"id": "r", "name": "Retry", "type": "adb_shell", "command": "cmd",
+              "expected_contains": "ok", "retry": 3, "retry_delay": 0}
+        result = runner.run_test(tc)
+        assert result.status == TestStatus.ERROR
+        assert mock_adb.shell.call_count == 1
+
+    def test_retry_exhausted(self, mock_adb):
+        mock_adb.shell.return_value = MagicMock(returncode=0, stdout="bad\n", stderr="")
+        runner = TestRunner(adb=mock_adb)
+        tc = {"id": "r", "name": "Retry", "type": "adb_shell", "command": "cmd",
+              "expected_contains": "ok", "retry": 3, "retry_delay": 0}
+        result = runner.run_test(tc)
+        assert result.status == TestStatus.FAIL
+        assert mock_adb.shell.call_count == 3
+
+    # --- B4: depends_on ---
+    def test_depends_on_skip(self, mock_adb):
+        mock_adb.shell.return_value = MagicMock(returncode=0, stdout="no match\n", stderr="")
+        runner = TestRunner(adb=mock_adb)
+        suite = {"test_suite": {"name": "Dep", "timeout": 60, "tests": [
+            {"id": "wifi", "name": "WiFi", "type": "adb_shell", "command": "cmd", "expected_contains": "CONNECTED"},
+            {"id": "internet", "name": "Internet", "type": "adb_shell", "command": "cmd",
+             "expected_contains": "ok", "depends_on": "wifi"},
+        ]}}
+        results = runner.run_suite(suite)
+        assert results[0].status == TestStatus.FAIL
+        assert results[1].status == TestStatus.SKIP
+        assert "dependency" in results[1].message
+
+    def test_depends_on_pass(self, mock_adb):
+        mock_adb.shell.return_value = MagicMock(returncode=0, stdout="CONNECTED ok\n", stderr="")
+        runner = TestRunner(adb=mock_adb)
+        suite = {"test_suite": {"name": "Dep", "timeout": 60, "tests": [
+            {"id": "wifi", "name": "WiFi", "type": "adb_shell", "command": "cmd", "expected_contains": "CONNECTED"},
+            {"id": "internet", "name": "Internet", "type": "adb_shell", "command": "cmd",
+             "expected_contains": "ok", "depends_on": "wifi"},
+        ]}}
+        results = runner.run_suite(suite)
+        assert results[0].status == TestStatus.PASS
+        assert results[1].status == TestStatus.PASS

@@ -68,9 +68,13 @@ class CliReporter:
 
         console.print(table)
 
-        passed = sum(1 for r in results if r.passed)
+        passed = sum(1 for r in results if r.status == TestStatus.PASS)
+        failed = sum(1 for r in results if r.status == TestStatus.FAIL)
+        error = sum(1 for r in results if r.status == TestStatus.ERROR)
+        skipped = sum(1 for r in results if r.status == TestStatus.SKIP)
         total = len(results)
+        all_ok = failed == 0 and error == 0
         console.print(
-            f"\n[bold]Summary:[/] {passed}/{total} passed "
-            f"({'[green]ALL PASS[/]' if passed == total else '[red]HAS FAILURES[/]'})"
+            f"\n[bold]Summary:[/] {passed} passed, {failed} failed, {error} error, {skipped} skipped / {total} total "
+            f"({'[green]ALL PASS[/]' if all_ok else '[red]HAS FAILURES[/]'})"
         )

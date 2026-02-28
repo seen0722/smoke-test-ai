@@ -3,7 +3,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
-from smoke_test_ai.core.test_runner import TestResult
+from smoke_test_ai.core.test_runner import TestResult, TestStatus
 
 
 class HtmlReporter:
@@ -20,7 +20,10 @@ class HtmlReporter:
         output_path: Path,
         device_info: dict | None = None,
     ) -> None:
-        passed = sum(1 for r in results if r.passed)
+        passed = sum(1 for r in results if r.status == TestStatus.PASS)
+        failed = sum(1 for r in results if r.status == TestStatus.FAIL)
+        error = sum(1 for r in results if r.status == TestStatus.ERROR)
+        skipped = sum(1 for r in results if r.status == TestStatus.SKIP)
         template = self.env.get_template("report.html")
         html = template.render(
             suite_name=suite_name,
@@ -28,7 +31,9 @@ class HtmlReporter:
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             total=len(results),
             passed=passed,
-            failed=len(results) - passed,
+            failed=failed,
+            error=error,
+            skipped=skipped,
             results=[r.to_dict() for r in results],
             device_info=device_info or {},
         )

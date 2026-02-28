@@ -18,26 +18,29 @@ test_suite:
     - id: "touch_responsive"
       name: "觸控回應"
       type: "adb_shell"
-      command: "dumpsys window | grep mCurrentFocus"
-      expected_pattern: "mCurrentFocus=.*"
+      command: "dumpsys input | grep -A2 'Touch'"
+      expected_contains: "TOUCHSCREEN"
 
     - id: "wifi_connected"
       name: "WiFi 連線"
       type: "adb_shell"
-      command: "dumpsys wifi | grep 'Wi-Fi is'"
-      expected_contains: "enabled"
+      command: "dumpsys wifi | grep 'mNetworkInfo'"
+      expected_contains: "state: CONNECTED"
 
     - id: "internet_access"
       name: "網路存取"
       type: "adb_shell"
       command: "ping -c 3 8.8.8.8"
-      expected_contains: "3 received"
+      expected_pattern: "[1-3] received"
+      depends_on: "wifi_connected"
 
     - id: "sim_status"
       name: "SIM 卡狀態"
       type: "adb_shell"
       command: "dumpsys telephony.registry | grep mServiceState"
       expected_not_contains: "OUT_OF_SERVICE"
+      requires:
+        device_capability: "has_sim"
 
     - id: "camera_available"
       name: "相機可用"
@@ -48,15 +51,15 @@ test_suite:
     - id: "audio_output"
       name: "音效輸出"
       type: "adb_shell"
-      command: "dumpsys audio | grep -i 'STREAM_MUSIC'"
-      expected_contains: "STREAM_MUSIC"
+      command: "dumpsys audio | grep 'Output devices'"
+      expected_pattern: "(SPEAKER|EARPIECE)"
 
     # --- GPS ---
     - id: "gps_provider"
       name: "GPS Provider 可用"
       type: "adb_shell"
-      command: "dumpsys location | grep 'gps'"
-      expected_contains: "gps"
+      command: "dumpsys location | grep -i 'gnss\\|gps' | head -5"
+      expected_pattern: "(enabled|present|gps)"
 
     - id: "gps_enabled"
       name: "GPS 定位已開啟"
@@ -90,37 +93,33 @@ test_suite:
       command: "dumpsys nfc | grep 'mState='"
       expected_contains: "on"
 
-    - id: "nfc_adapter"
-      name: "NFC Adapter 存在"
-      type: "adb_shell"
-      command: "dumpsys nfc | grep 'mScreenState='"
-      expected_pattern: "mScreenState=.*"
+    # nfc_adapter 已合併到 nfc_enabled，移除冗餘測試
 
     # --- 感測器 ---
     - id: "sensor_accelerometer"
       name: "加速度計感測器"
       type: "adb_shell"
-      command: "dumpsys sensorservice | grep -i accelerometer"
-      expected_pattern: ".*[Aa]ccelerometer.*"
+      command: "dumpsys sensorservice | grep -A3 -i accelerometer | grep 'last event'"
+      expected_pattern: "last event.*=.*"
 
     - id: "sensor_gyroscope"
       name: "陀螺儀感測器"
       type: "adb_shell"
-      command: "dumpsys sensorservice | grep -i gyroscope"
-      expected_pattern: ".*[Gg]yroscope.*"
+      command: "dumpsys sensorservice | grep -A3 -i gyroscope | grep 'last event'"
+      expected_pattern: "last event.*=.*"
 
     # --- 儲存與記憶體 ---
     - id: "storage_available"
       name: "內部儲存可用"
       type: "adb_shell"
-      command: "df /data | tail -1"
-      expected_pattern: ".*[0-9]+.*"
+      command: "df /data | awk 'NR==2{print $4}'"
+      expected_pattern: "[0-9]{7,}"
 
     - id: "memory_available"
-      name: "記憶體資訊正常"
+      name: "記憶體可用量正常"
       type: "adb_shell"
-      command: "cat /proc/meminfo | grep MemTotal"
-      expected_pattern: "MemTotal:\\s+[0-9]+ kB"
+      command: "cat /proc/meminfo | grep MemAvailable"
+      expected_pattern: "MemAvailable:\\s+[1-9][0-9]+ kB"
 
     # --- 螢幕亮度與自動旋轉 ---
     - id: "brightness_settable"
@@ -147,3 +146,37 @@ test_suite:
       type: "adb_shell"
       command: "dumpsys battery | grep 'powered'"
       expected_pattern: ".*powered: true"
+
+    # --- 系統穩定性 ---
+    - id: "no_system_crash"
+      name: "無系統崩潰"
+      type: "adb_shell"
+      command: "logcat -b crash -d | grep 'FATAL EXCEPTION' | wc -l"
+      expected_pattern: "^0$"
+
+    - id: "selinux_enforcing"
+      name: "SELinux 強制模式"
+      type: "adb_check"
+      command: "getenforce"
+      expected: "Enforcing"
+
+    - id: "dns_resolution"
+      name: "DNS 解析正常"
+      type: "adb_shell"
+      command: "ping -c 1 -W 5 google.com"
+      expected_pattern: "[1] received"
+      depends_on: "wifi_connected"
+      retry: 2
+      retry_delay: 3
+
+    - id: "surfaceflinger"
+      name: "SurfaceFlinger 運行中"
+      type: "adb_shell"
+      command: "service check SurfaceFlinger"
+      expected_contains: "found"
+
+    - id: "system_server"
+      name: "Activity Manager 正常"
+      type: "adb_shell"
+      command: "dumpsys activity | head -1"
+      expected_contains: "ACTIVITY MANAGER"

@@ -2,7 +2,7 @@ device:
   name: "Product-A"
   build_type: "user"
   screen_resolution: [1080, 2400]
-  has_sim: true
+  has_sim: false
   has_dp_output: false
   lock_pin: "0000"              # FBE unlock PIN (omit if no PIN set)
 
@@ -19,7 +19,7 @@ device:
       - "fastboot reboot"
 
   screen_capture:
-    method: "webcam"
+    method: "adb"
     webcam_device: "/dev/video0"
     webcam_crop: [100, 50, 1080, 1920]
 

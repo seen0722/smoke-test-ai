@@ -145,11 +145,16 @@ class Orchestrator:
             webcam_capture = self._get_webcam_capture()
             llm = self._get_llm_client()
             analyzer = VisualAnalyzer(llm)
+            device_capabilities = {
+                k: v for k, v in self.device_config.items()
+                if isinstance(v, bool)
+            }
             runner = TestRunner(
                 adb=adb,
                 visual_analyzer=analyzer,
                 screen_capture=screen_capture,
                 webcam_capture=webcam_capture,
+                device_capabilities=device_capabilities,
             )
             results = runner.run_suite(suite_config)
             if webcam_capture:
