@@ -30,10 +30,11 @@ class TestResult:
         return {"id": self.id, "name": self.name, "status": self.status.value, "message": self.message, "duration": self.duration, "screenshot_path": self.screenshot_path}
 
 class TestRunner:
-    def __init__(self, adb: AdbController, visual_analyzer=None, screen_capture=None):
+    def __init__(self, adb: AdbController, visual_analyzer=None, screen_capture=None, webcam_capture=None):
         self.adb = adb
         self.visual_analyzer = visual_analyzer
         self.screen_capture = screen_capture
+        self.webcam_capture = webcam_capture
 
     def run_suite(self, suite_config: dict) -> list[TestResult]:
         suite = suite_config["test_suite"]
@@ -95,15 +96,32 @@ class TestRunner:
         return TestResult(id=tc["id"], name=tc["name"], status=TestStatus.FAIL, message=f"Command failed with exit code {proc.returncode}")
 
     def _run_screenshot_llm(self, tc: dict) -> TestResult:
-        if not self.visual_analyzer or not self.screen_capture:
-            return TestResult(id=tc["id"], name=tc["name"], status=TestStatus.SKIP, message="Visual analyzer or screen capture not configured")
-        image = self.screen_capture.capture()
+        if not self.visual_analyzer:
+            return TestResult(id=tc["id"], name=tc["name"], status=TestStatus.SKIP, message="Visual analyzer not configured")
+
+        # Priority: webcam (sees real screen) > adb screencap (framebuffer only)
+        image = None
+        capture_method = None
+        if self.webcam_capture:
+            image = self.webcam_capture.capture()
+            if image is not None:
+                capture_method = "webcam"
+                logger.info(f"  Captured via webcam")
+        if image is None and self.screen_capture:
+            image = self.screen_capture.capture()
+            if image is not None:
+                capture_method = "adb_screencap"
+                logger.info(f"  Captured via ADB screencap (webcam unavailable)")
         if image is None:
-            return TestResult(id=tc["id"], name=tc["name"], status=TestStatus.ERROR, message="Failed to capture screen")
+            return TestResult(id=tc["id"], name=tc["name"], status=TestStatus.ERROR, message="Failed to capture screen (no capture source available)")
+
         result = self.visual_analyzer.analyze_test_screenshot(image, tc["prompt"])
+        reason = result.get("reason", "")
+        if capture_method:
+            reason = f"[{capture_method}] {reason}"
         if result.get("pass", False):
-            return TestResult(id=tc["id"], name=tc["name"], status=TestStatus.PASS, message=result.get("reason", ""))
-        return TestResult(id=tc["id"], name=tc["name"], status=TestStatus.FAIL, message=result.get("reason", "LLM judged as fail"))
+            return TestResult(id=tc["id"], name=tc["name"], status=TestStatus.PASS, message=reason)
+        return TestResult(id=tc["id"], name=tc["name"], status=TestStatus.FAIL, message=reason or "LLM judged as fail")
 
     def _run_apk_instrumentation(self, tc: dict) -> TestResult:
         package = tc["package"]

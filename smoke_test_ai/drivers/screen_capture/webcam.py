@@ -15,6 +15,9 @@ class WebcamCapture(ScreenCapture):
         self._cap = cv2.VideoCapture(self.device_index)
         if not self._cap.isOpened():
             raise RuntimeError(f"Cannot open webcam: {self.device_index}")
+        # Warmup: discard initial frames to let auto-exposure stabilize
+        for _ in range(10):
+            self._cap.read()
         logger.info(f"Webcam opened: {self.device_index}")
 
     def capture(self) -> np.ndarray | None:

@@ -44,6 +44,22 @@ class Orchestrator:
             )
         raise ValueError(f"Unknown screen capture method: {method}")
 
+    def _get_webcam_capture(self) -> WebcamCapture | None:
+        """Create webcam capture if configured. Returns None if not available."""
+        sc = self.device_config.get("screen_capture", {})
+        webcam_device = sc.get("webcam_device")
+        if webcam_device is None:
+            return None
+        try:
+            crop = tuple(sc["webcam_crop"]) if "webcam_crop" in sc else None
+            cam = WebcamCapture(device_index=webcam_device, crop=crop)
+            cam.open()
+            logger.info(f"Webcam opened: {webcam_device}")
+            return cam
+        except Exception as e:
+            logger.warning(f"Webcam not available ({e}), will fallback to ADB screencap")
+            return None
+
     def _get_llm_client(self) -> LlmClient:
         llm_cfg = self.settings["llm"]
         return LlmClient(
@@ -111,14 +127,18 @@ class Orchestrator:
         if suite_config:
             logger.info("=== Stage 3: Test Execute ===")
             screen_capture = self._get_screen_capture(serial=serial)
+            webcam_capture = self._get_webcam_capture()
             llm = self._get_llm_client()
             analyzer = VisualAnalyzer(llm)
             runner = TestRunner(
                 adb=adb,
                 visual_analyzer=analyzer,
                 screen_capture=screen_capture,
+                webcam_capture=webcam_capture,
             )
             results = runner.run_suite(suite_config)
+            if webcam_capture:
+                webcam_capture.close()
         else:
             results = []
 
