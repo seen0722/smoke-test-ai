@@ -1,0 +1,28 @@
+device:
+  name: "Product-A"
+  build_type: "user"
+  screen_resolution: [1080, 2400]
+  has_sim: true
+  has_dp_output: false
+
+  flash:
+    profile: "fastboot"
+    images:
+      - partition: "system"
+        file: "${BUILD_DIR}/system.img"
+      - partition: "vendor"
+        file: "${BUILD_DIR}/vendor.img"
+      - partition: "boot"
+        file: "${BUILD_DIR}/boot.img"
+    post_flash:
+      - "fastboot reboot"
+
+  screen_capture:
+    method: "webcam"
+    webcam_device: "/dev/video0"
+    webcam_crop: [100, 50, 1080, 1920]
+
+  setup_wizard:
+    method: "llm_vision"
+    max_steps: 30
+    timeout: 300
