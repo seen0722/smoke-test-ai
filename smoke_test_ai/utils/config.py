@@ -1,6 +1,9 @@
 import os
 import yaml
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def _expand_env_vars(data):
     if isinstance(data, str):

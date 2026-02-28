@@ -1,0 +1,21 @@
+llm:
+  provider: "openai"
+  base_url: "https://api.openai.com"
+  vision_model: "gpt-4o-mini"
+  text_model: "gpt-4o-mini"
+  api_key: "${OPENAI_API_KEY}"
+  timeout: 30
+  max_retries: 3
+
+wifi:
+  ssid: "TestLab-5G"
+  password: ""
+
+reporting:
+  formats: ["cli", "json"]
+  output_dir: "results/"
+  screenshots: true
+
+parallel:
+  max_devices: 4
+  per_device_timeout: 900

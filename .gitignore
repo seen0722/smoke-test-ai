@@ -8,4 +8,3 @@ results/
 *.log
 .env
 .DS_Store
-config/settings.yaml
