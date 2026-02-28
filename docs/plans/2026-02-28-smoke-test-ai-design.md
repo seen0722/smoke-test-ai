@@ -144,11 +144,26 @@ LLM 回傳格式：
 }
 ```
 
+### 螢幕關閉防護
+
+user build 在各階段的螢幕喚醒策略：
+
+| 階段 | 防護方式 | 說明 |
+|------|---------|------|
+| Stage 1 (無 ADB) | HID 滑鼠動作 | 安全喚醒，不會關閉已開啟的螢幕 |
+| Stage 1 (無 ADB) | HID Power 鍵 (fallback) | 連續 2 次滑鼠喚醒失敗後升級，有切換風險 |
+| Stage 1 (無 ADB) | Webcam 亮度偵測 | `np.mean(image) < 10` 判定螢幕關閉 |
+| Stage 2+ (有 ADB) | `stay_on_while_plugged_in 3` | USB 充電時螢幕常亮 |
+| Stage 2+ (有 ADB) | `screen_off_timeout 1800000` | timeout 設為 30 分鐘 |
+| Stage 2+ (有 ADB) | `KEYCODE_WAKEUP` | 立即喚醒螢幕 |
+
 ### Stage 2: ADB Bootstrap
 
 ADB 開啟後的初始設定：
 - WiFi 連線 (`adb shell cmd wifi connect-network`)
 - 螢幕常亮 (`settings put global stay_on_while_plugged_in 3`)
+- 螢幕 timeout 設為 30 分鐘 (`settings put system screen_off_timeout 1800000`)
+- 立即喚醒螢幕 (`input keyevent KEYCODE_WAKEUP`)
 - 安裝測試 APK（如有需要）
 
 ### Stage 3: Test Execute
@@ -175,59 +190,70 @@ ADB 開啟後的初始設定：
 
 ```
 smoke-test-ai/
-├── cli.py                          # CLI 進入點
+├── cli.py                          # CLI 進入點 (Click)
+├── pyproject.toml                  # 專案設定 & 依賴
+├── requirements.txt
+├── .gitignore
+│
 ├── config/
-│   ├── devices/                    # 裝置定義
-│   ├── flash_profiles/             # 刷機設定
-│   ├── test_suites/                # 測試套件 (可客製化)
-│   └── settings.yaml               # 全域設定
+│   ├── settings.yaml               # 全域設定 (LLM, WiFi, 報告)
+│   ├── devices/
+│   │   └── product_a.yaml          # 裝置定義範例
+│   ├── flash_profiles/             # 刷機設定 (預留)
+│   └── test_suites/
+│       └── smoke_basic.yaml        # 基礎測試套件 (23 項)
 │
 ├── smoke_test_ai/
 │   ├── core/
-│   │   ├── orchestrator.py         # 主流程控制
-│   │   ├── device_manager.py       # 多裝置管理 & 並行
-│   │   └── test_runner.py          # 測試執行引擎
+│   │   ├── orchestrator.py         # 5 階段 pipeline 編排器
+│   │   └── test_runner.py          # 測試執行引擎 (4 種測試類型)
 │   │
 │   ├── drivers/
-│   │   ├── aoa_hid.py              # AOA2 HID 驅動 (PyUSB)
 │   │   ├── adb_controller.py       # ADB 控制封裝
+│   │   ├── aoa_hid.py              # AOA2 HID 驅動 (PyUSB)
 │   │   ├── flash/                  # 可插拔 flash drivers
-│   │   │   ├── base.py
-│   │   │   ├── fastboot.py
-│   │   │   ├── sp_flash_tool.py
-│   │   │   └── custom.py
+│   │   │   ├── base.py             # 抽象基類
+│   │   │   ├── fastboot.py         # Fastboot 刷機
+│   │   │   └── custom.py           # 自訂指令刷機
 │   │   └── screen_capture/         # 可插拔螢幕擷取
-│   │       ├── base.py
-│   │       ├── webcam.py           # OpenCV
-│   │       ├── hdmi_capture.py
-│   │       └── adb_screencap.py
+│   │       ├── base.py             # 抽象基類
+│   │       ├── webcam.py           # OpenCV Webcam
+│   │       └── adb_screencap.py    # ADB screencap
 │   │
 │   ├── ai/
-│   │   ├── llm_client.py           # LLM 抽象層
-│   │   ├── setup_wizard_agent.py   # Setup Wizard Agent
-│   │   ├── visual_analyzer.py      # 視覺分析
-│   │   └── test_result_analyzer.py # 結果分析
+│   │   ├── llm_client.py           # LLM 抽象層 (Ollama + OpenAI 相容)
+│   │   ├── setup_wizard_agent.py   # Setup Wizard 自動化 Agent
+│   │   └── visual_analyzer.py      # 視覺分析 (截圖判讀)
 │   │
 │   ├── reporting/
-│   │   ├── cli_reporter.py
-│   │   ├── html_reporter.py
-│   │   ├── json_reporter.py
-│   │   └── api_reporter.py
+│   │   ├── cli_reporter.py         # Rich 表格輸出
+│   │   ├── json_reporter.py        # JSON 報告
+│   │   └── html_reporter.py        # Jinja2 HTML 報告
 │   │
 │   └── utils/
-│       ├── usb_utils.py
-│       └── logger.py
-│
-├── scripts/
-│   ├── install.sh
-│   └── setup_udev_rules.sh
+│       ├── config.py               # YAML 設定載入 + 環境變數展開
+│       └── logger.py               # Rich 日誌
 │
 ├── templates/
-│   └── report.html
+│   └── report.html                 # HTML 報告模板
 │
-├── tests/
-├── requirements.txt
-└── pyproject.toml
+├── scripts/
+│   └── install.sh                  # 安裝腳本
+│
+├── tests/                          # 46 個單元測試
+│   ├── conftest.py
+│   ├── test_utils.py               # 設定載入 (4 tests)
+│   ├── test_adb_controller.py      # ADB 控制 (8 tests)
+│   ├── test_screen_capture.py      # 螢幕擷取 (5 tests)
+│   ├── test_aoa_hid.py             # AOA2 HID (7 tests)
+│   ├── test_flash.py               # 刷機驅動 (4 tests)
+│   ├── test_ai.py                  # LLM + 視覺分析 (5 tests)
+│   ├── test_runner.py              # 測試引擎 (8 tests)
+│   ├── test_reporting.py           # 報告產生 (2 tests)
+│   └── test_orchestrator.py        # 編排器 (3 tests)
+│
+└── docs/
+    └── plans/                      # 設計 & 實作計畫
 ```
 
 ---
@@ -238,13 +264,14 @@ smoke-test-ai/
 |------|------|------|
 | 語言 | Python 3.10+ | 團隊熟悉，生態豐富 |
 | AOA2 HID | PyUSB + libusb | 跨平台，純 Python |
-| 螢幕擷取 | OpenCV (cv2) | Webcam/HDMI 通用 |
-| LLM | Ollama API / OpenAI-compatible API | 支援 Ollama 和企業 LLM |
+| 螢幕擷取 | OpenCV (cv2) | Webcam 通用 |
+| 圖像處理 | Pillow + NumPy | 螢幕亮度偵測、圖片處理 |
+| LLM | httpx + Ollama / OpenAI-compatible API | 支援 Ollama 和企業 LLM |
 | ADB | subprocess + adb CLI | 最穩定 |
 | 設定檔 | YAML (PyYAML) | 人類可讀，容易客製化 |
 | CLI | Click + Rich | 美觀的終端輸出 |
-| 報告 | Jinja2 (HTML) + WeasyPrint (PDF) | 模板化 |
-| 並行 | asyncio + ThreadPoolExecutor | 多裝置並行 |
+| 報告 | Jinja2 (HTML) + JSON | 模板化，可選 WeasyPrint (PDF) |
+| 測試 | pytest + pytest-mock | 46 個單元測試，全 Mock |
 
 ---
 
@@ -301,7 +328,7 @@ parallel:
   per_device_timeout: 900
 ```
 
-### Test Suite
+### Test Suite (smoke_basic — 23 項)
 
 ```yaml
 # config/test_suites/smoke_basic.yaml
@@ -310,53 +337,48 @@ test_suite:
   timeout: 600
 
   tests:
-    - id: "boot_complete"
-      name: "開機完成驗證"
-      type: "adb_check"
-      command: "getprop sys.boot_completed"
-      expected: "1"
+    # --- 基礎 ---
+    - { id: boot_complete,   name: 開機完成驗證, type: adb_check, command: "getprop sys.boot_completed", expected: "1" }
+    - { id: display_normal,  name: 螢幕顯示正常, type: screenshot_llm, prompt: "螢幕是否正常顯示？是否有異常色塊或花屏？" }
+    - { id: touch_responsive, name: 觸控回應, type: adb_shell, command: "input tap 540 960 && dumpsys window | grep mCurrentFocus", expected_contains: "Launcher" }
 
-    - id: "display_normal"
-      name: "螢幕顯示正常"
-      type: "screenshot_llm"
-      prompt: "螢幕是否正常顯示？是否有異常色塊或花屏？"
-      pass_criteria: "normal"
+    # --- 網路 ---
+    - { id: wifi_connected,  name: WiFi 連線, type: adb_shell, command: "dumpsys wifi | grep 'Wi-Fi is'", expected_contains: "enabled" }
+    - { id: internet_access, name: 網路存取, type: adb_shell, command: "ping -c 3 8.8.8.8", expected_contains: "3 received" }
+    - { id: sim_status,      name: SIM 卡狀態, type: adb_shell, command: "dumpsys telephony.registry | grep mServiceState", expected_not_contains: "OUT_OF_SERVICE" }
 
-    - id: "touch_responsive"
-      name: "觸控回應"
-      type: "adb_shell"
-      command: "input tap 540 960 && dumpsys window | grep mCurrentFocus"
-      expected_contains: "Launcher"
+    # --- 多媒體 ---
+    - { id: camera_available, name: 相機可用, type: adb_shell, command: "dumpsys media.camera | grep 'Device version'", expected_pattern: "Device version:.*" }
+    - { id: audio_output,    name: 音效輸出, type: adb_shell, command: "dumpsys audio | grep 'stream_MUSIC'", expected_contains: "stream_MUSIC" }
 
-    - id: "wifi_connected"
-      name: "WiFi 連線"
-      type: "adb_shell"
-      command: "dumpsys wifi | grep 'Wi-Fi is'"
-      expected_contains: "enabled"
+    # --- GPS ---
+    - { id: gps_provider,    name: GPS Provider 可用, type: adb_shell, command: "dumpsys location | grep 'gps'", expected_contains: "gps" }
+    - { id: gps_enabled,     name: GPS 定位已開啟, type: adb_shell, command: "settings get secure location_providers_allowed", expected_contains: "gps" }
 
-    - id: "internet_access"
-      name: "網路存取"
-      type: "adb_shell"
-      command: "ping -c 3 8.8.8.8"
-      expected_contains: "3 received"
+    # --- 藍牙 ---
+    - { id: bluetooth_enabled, name: 藍牙已啟用, type: adb_shell, command: "dumpsys bluetooth_manager | grep 'enabled'", expected_contains: "enabled" }
+    - { id: bluetooth_adapter, name: 藍牙 Adapter 存在, type: adb_shell, command: "dumpsys bluetooth_manager | grep 'name:'", expected_pattern: "name:.*" }
+    - { id: bluetooth_address, name: 藍牙 MAC 位址有效, type: adb_shell, command: "dumpsys bluetooth_manager | grep 'address:'", expected_pattern: "address: [0-9A-Fa-f]{2}:" }
 
-    - id: "sim_status"
-      name: "SIM 卡狀態"
-      type: "adb_shell"
-      command: "dumpsys telephony.registry | grep mServiceState"
-      expected_not_contains: "OUT_OF_SERVICE"
+    # --- NFC ---
+    - { id: nfc_enabled,     name: NFC 已啟用, type: adb_shell, command: "dumpsys nfc | grep 'mState='", expected_contains: "ON" }
+    - { id: nfc_adapter,     name: NFC Adapter 存在, type: adb_shell, command: "dumpsys nfc | grep 'mIsNdefPushEnabled'", expected_pattern: "mIsNdefPushEnabled=.*" }
 
-    - id: "camera_available"
-      name: "相機可用"
-      type: "adb_shell"
-      command: "dumpsys media.camera | grep 'Device version'"
-      expected_pattern: "Device version:.*"
+    # --- 感測器 ---
+    - { id: sensor_accelerometer, name: 加速度計感測器, type: adb_shell, command: "dumpsys sensorservice | grep -i accelerometer", expected_pattern: ".*[Aa]ccelerometer.*" }
+    - { id: sensor_gyroscope, name: 陀螺儀感測器, type: adb_shell, command: "dumpsys sensorservice | grep -i gyroscope", expected_pattern: ".*[Gg]yroscope.*" }
 
-    - id: "audio_output"
-      name: "音效輸出"
-      type: "adb_shell"
-      command: "dumpsys audio | grep 'stream_MUSIC'"
-      expected_contains: "stream_MUSIC"
+    # --- 儲存與記憶體 ---
+    - { id: storage_available, name: 內部儲存可用, type: adb_shell, command: "df /data | tail -1", expected_pattern: ".*[0-9]+.*" }
+    - { id: memory_available, name: 記憶體資訊正常, type: adb_shell, command: "cat /proc/meminfo | grep MemTotal", expected_pattern: "MemTotal:\\s+[0-9]+ kB" }
+
+    # --- 螢幕 ---
+    - { id: brightness_settable, name: 螢幕亮度可設定, type: adb_shell, command: "settings get system screen_brightness", expected_pattern: "^[0-9]+$" }
+    - { id: auto_rotate,     name: 自動旋轉功能, type: adb_shell, command: "settings get system accelerometer_rotation", expected_pattern: "^[01]$" }
+
+    # --- USB 與充電 ---
+    - { id: battery_status,  name: 電池狀態正常, type: adb_shell, command: "dumpsys battery | grep 'status'", expected_pattern: "status: [2-5]" }
+    - { id: usb_connected,   name: USB 連線狀態, type: adb_shell, command: "dumpsys battery | grep 'USB powered'", expected_contains: "true" }
 ```
 
 ---
@@ -364,27 +386,22 @@ test_suite:
 ## CLI Usage
 
 ```bash
-# 完整 smoke test
-smoke-test run --device product_a --suite smoke_basic --build /path/to/images/
+# 完整 smoke test (flash → Setup Wizard → test → report)
+smoke-test run --device product_a --suite smoke_basic --build /path/to/images/ --serial DEV001
 
-# 僅刷機
-smoke-test flash --device product_a --build /path/to/images/
+# 跳過刷機 (裝置已刷好)
+smoke-test run --device product_a --suite smoke_basic --skip-flash --serial DEV001
 
-# 僅 Setup Wizard 自動化
-smoke-test setup --device product_a
+# 跳過 Setup Wizard (userdebug build 或已完成 Setup Wizard)
+smoke-test run --device product_a --suite smoke_basic --skip-flash --skip-setup
 
-# 僅執行測試
-smoke-test test --suite smoke_basic --serial DEVICE_SERIAL
+# 僅執行測試 (最簡模式，假設 ADB 已連線)
+smoke-test test --suite smoke_basic --serial DEV001
 
-# 多裝置並行
-smoke-test run --device product_a --suite smoke_basic \
-  --serials DEV001,DEV002,DEV003 --parallel
-
-# 產出報告
-smoke-test report --input results/2026-02-28/ --format html,pdf
-
-# 列出可用裝置/測試套件
+# 列出可用裝置配置
 smoke-test devices list
+
+# 列出可用測試套件
 smoke-test suites list
 ```
 
