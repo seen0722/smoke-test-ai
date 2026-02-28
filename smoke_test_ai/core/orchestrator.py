@@ -102,6 +102,10 @@ class Orchestrator:
             logger.error("Device not found via ADB")
             return []
 
+        # Skip Setup Wizard (userdebug: use ADB settings)
+        if not skip_setup:
+            adb.skip_setup_wizard()
+
         # FBE unlock first: must unlock before WiFi and other services work
         user_state = adb.get_user_state()
         if user_state == "RUNNING_LOCKED":

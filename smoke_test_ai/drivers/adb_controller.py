@@ -125,6 +125,24 @@ class AdbController:
         state = self.get_user_state()
         return state == "RUNNING_UNLOCKED"
 
+    def skip_setup_wizard(self) -> bool:
+        """Skip Setup Wizard by marking device as provisioned (userdebug only)."""
+        provisioned = self.shell("settings get global device_provisioned").stdout.strip()
+        if provisioned == "1":
+            logger.info("Device already provisioned, Setup Wizard not active")
+            return True
+        logger.info("Skipping Setup Wizard...")
+        self.shell("settings put global device_provisioned 1")
+        self.shell("settings put secure user_setup_complete 1")
+        self.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME")
+        time.sleep(2)
+        provisioned = self.shell("settings get global device_provisioned").stdout.strip()
+        if provisioned == "1":
+            logger.info("Setup Wizard skipped successfully")
+            return True
+        logger.warning("Failed to skip Setup Wizard")
+        return False
+
     def factory_reset(self) -> None:
         """Factory reset the device. Device will reboot and all data will be erased."""
         logger.warning("Initiating factory reset...")
