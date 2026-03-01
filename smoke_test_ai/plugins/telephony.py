@@ -25,6 +25,10 @@ class TelephonyPlugin(TestPlugin):
             return self._check_signal(test_case, context)
         if action == "make_call":
             return self._make_call(test_case, context)
+        if action == "check_voice_type":
+            return self._check_voice_type(test_case, context)
+        if action == "sim_info":
+            return self._sim_info(test_case, context)
         return TestResult(
             id=test_case["id"], name=test_case["name"],
             status=TestStatus.ERROR,
@@ -145,6 +149,50 @@ class TelephonyPlugin(TestPlugin):
                               message=f"Call to {to_number} active (state=OFFHOOK)")
         return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                           message=f"Call state={call_state}, expected OFFHOOK(2)")
+
+    def _check_voice_type(self, tc: dict, ctx: PluginContext) -> TestResult:
+        tid, tname = tc["id"], tc["name"]
+        if not ctx.snippet:
+            return TestResult(id=tid, name=tname, status=TestStatus.SKIP,
+                              message="Snippet not available on DUT")
+        try:
+            vtype = ctx.snippet.getVoiceNetworkType()
+            vtype_name = NETWORK_TYPE_NAMES.get(vtype, f"UNKNOWN({vtype})")
+        except Exception as e:
+            return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                              message=f"getVoiceNetworkType failed: {e}")
+
+        if vtype != 0:
+            return TestResult(id=tid, name=tname, status=TestStatus.PASS,
+                              message=f"Voice network type: {vtype_name}")
+        return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                          message="Voice network type is UNKNOWN (0)")
+
+    def _sim_info(self, tc: dict, ctx: PluginContext) -> TestResult:
+        tid, tname = tc["id"], tc["name"]
+        if not ctx.snippet:
+            return TestResult(id=tid, name=tname, status=TestStatus.SKIP,
+                              message="Snippet not available on DUT")
+        try:
+            line1 = ctx.snippet.getLine1Number()
+            imsi = ctx.snippet.getSubscriberId()
+        except Exception as e:
+            return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                              message=f"SIM info query failed: {e}")
+
+        parts = []
+        if line1:
+            parts.append(f"number={line1}")
+        if imsi:
+            # Mask IMSI for privacy: show first 5 + last 2
+            masked = imsi[:5] + "****" + imsi[-2:] if len(imsi) > 7 else imsi
+            parts.append(f"IMSI={masked}")
+
+        if parts:
+            return TestResult(id=tid, name=tname, status=TestStatus.PASS,
+                              message=f"SIM info: {', '.join(parts)}")
+        return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                          message="SIM info unavailable (no number, no IMSI)")
 
     @staticmethod
     def _render_body(template: str) -> str:

@@ -270,6 +270,52 @@ test_suite:
         expected_ssid: "${WIFI_SSID}"
       depends_on: "wifi_scan"
 
+    # === 功能測試：WiFi 進階 (Tier 1) ===
+    - id: "wifi_toggle"
+      name: "WiFi 開關切換"
+      type: "wifi"
+      action: "toggle"
+      depends_on: "wifi_connected"
+
+    - id: "wifi_connection_info"
+      name: "WiFi 連線品質"
+      type: "wifi"
+      action: "connection_info"
+      params:
+        min_rssi: -80
+      depends_on: "wifi_toggle"
+
+    - id: "wifi_dhcp"
+      name: "WiFi DHCP 分配"
+      type: "wifi"
+      action: "dhcp_info"
+      depends_on: "wifi_toggle"
+
+    # === 功能測試：WiFi 進階 (Tier 2) ===
+    - id: "wifi_5ghz"
+      name: "WiFi 5GHz 支援"
+      type: "wifi"
+      action: "is_5ghz_supported"
+      depends_on: "wifi_connected"
+
+    - id: "wifi_p2p"
+      name: "WiFi P2P 支援"
+      type: "wifi"
+      action: "is_p2p_supported"
+      depends_on: "wifi_connected"
+
+    - id: "wifi_aware"
+      name: "WiFi Aware 支援"
+      type: "wifi"
+      action: "is_aware_available"
+      depends_on: "wifi_connected"
+
+    - id: "wifi_hotspot"
+      name: "WiFi 熱點開關"
+      type: "wifi"
+      action: "hotspot"
+      depends_on: "wifi_toggle"
+
     # === 功能測試：BLE 掃描 ===
     - id: "ble_scan"
       name: "BLE 裝置掃描"
@@ -279,6 +325,46 @@ test_suite:
         scan_duration: 5
       depends_on: "bluetooth_enabled"
 
+    # === 功能測試：藍牙進階 (Tier 1) ===
+    - id: "bt_toggle"
+      name: "藍牙開關切換"
+      type: "bluetooth"
+      action: "toggle"
+      depends_on: "bluetooth_enabled"
+
+    - id: "bt_classic_scan"
+      name: "Classic BT 掃描"
+      type: "bluetooth"
+      action: "classic_scan"
+      depends_on: "bt_toggle"
+
+    # === 功能測試：藍牙進階 (Tier 2) ===
+    - id: "bt_adapter_info"
+      name: "BT Adapter 資訊"
+      type: "bluetooth"
+      action: "adapter_info"
+      depends_on: "bt_toggle"
+
+    - id: "bt_paired_devices"
+      name: "已配對裝置列表"
+      type: "bluetooth"
+      action: "paired_devices"
+      depends_on: "bt_toggle"
+
+    - id: "ble_advertise"
+      name: "BLE 廣播測試"
+      type: "bluetooth"
+      action: "ble_advertise"
+      params:
+        duration: 3
+      depends_on: "bt_toggle"
+
+    - id: "bt_le_audio"
+      name: "LE Audio 支援"
+      type: "bluetooth"
+      action: "le_audio_supported"
+      depends_on: "bluetooth_enabled"
+
     # === 功能測試：音頻播放 ===
     - id: "audio_playback"
       name: "音頻播放"
@@ -286,6 +372,27 @@ test_suite:
       action: "play_and_check"
       params:
         play_duration: 2
+
+    # === 功能測試：音頻進階 (Tier 1) ===
+    - id: "audio_volume"
+      name: "音量控制"
+      type: "audio"
+      action: "volume_control"
+
+    - id: "audio_microphone"
+      name: "麥克風靜音控制"
+      type: "audio"
+      action: "microphone_test"
+
+    - id: "audio_devices"
+      name: "音訊裝置偵測"
+      type: "audio"
+      action: "list_devices"
+
+    - id: "audio_route"
+      name: "音訊路由資訊"
+      type: "audio"
+      action: "audio_route"
 
     # === 功能測試：網路下載 ===
     - id: "download_wifi"
@@ -315,3 +422,20 @@ test_suite:
         host: "8.8.8.8"
         port: 443
       depends_on: "wifi_connected"
+
+    # === 功能測試：Telephony 進階 ===
+    - id: "voice_network_type"
+      name: "語音網路類型"
+      type: "telephony"
+      action: "check_voice_type"
+      requires:
+        device_capability: "has_sim"
+      depends_on: "sim_status"
+
+    - id: "sim_info"
+      name: "SIM 卡資訊"
+      type: "telephony"
+      action: "sim_info"
+      requires:
+        device_capability: "has_sim"
+      depends_on: "sim_status"

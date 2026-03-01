@@ -80,6 +80,10 @@ class TestPlanReporter:
                 return f"Network type matches /{params.get('expected_data_type', '.*')}/"
             if action == "make_call":
                 return f"Call to {params.get('to_number', 'peer')} reaches OFFHOOK state"
+            if action == "check_voice_type":
+                return "Voice network type is not UNKNOWN"
+            if action == "sim_info":
+                return "SIM card number or IMSI is readable"
             return f"Telephony action: {action}"
 
         if t == "wifi":
@@ -89,6 +93,17 @@ class TestPlanReporter:
                 return "WiFi scan finds at least 1 network"
             if action == "scan_for_ssid":
                 return f"WiFi scan finds SSID \"{params.get('expected_ssid', '')}\""
+            if action == "toggle":
+                return "WiFi disable→enable cycle completes successfully"
+            if action == "connection_info":
+                min_rssi = params.get("min_rssi", -80)
+                return f"WiFi connected with RSSI >= {min_rssi} dBm"
+            if action == "dhcp_info":
+                return "DHCP assigns valid IP and gateway"
+            if action in ("is_5ghz_supported", "is_p2p_supported", "is_aware_available"):
+                return "Capability query completes without error"
+            if action == "hotspot":
+                return "Hotspot enable→disable cycle completes"
             return f"WiFi action: {action}"
 
         if t == "bluetooth":
@@ -96,12 +111,32 @@ class TestPlanReporter:
             params = tc.get("params", {})
             if action == "ble_scan":
                 return f"BLE scan finds at least 1 device (scan {params.get('scan_duration', 5)}s)"
+            if action == "toggle":
+                return "Bluetooth disable→enable cycle completes"
+            if action == "classic_scan":
+                return "Classic BT discovery completes without error"
+            if action == "adapter_info":
+                return "BT adapter name and address are valid"
+            if action == "paired_devices":
+                return "Paired device list query completes"
+            if action == "ble_advertise":
+                return "BLE advertising starts and stops successfully"
+            if action == "le_audio_supported":
+                return "LE Audio support query completes"
             return f"Bluetooth action: {action}"
 
         if t == "audio":
             action = tc.get("action", "")
             if action == "play_and_check":
                 return "Audio plays and mediaIsPlaying() returns true"
+            if action == "volume_control":
+                return "Music volume set and readback matches"
+            if action == "microphone_test":
+                return "Microphone mute/unmute toggles correctly"
+            if action == "list_devices":
+                return "At least 1 audio device detected"
+            if action == "audio_route":
+                return "Audio route info is available"
             return f"Audio action: {action}"
 
         if t == "network":

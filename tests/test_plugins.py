@@ -440,6 +440,45 @@ class TestTelephonyPlugin:
         calls = [str(c) for c in adb.shell.call_args_list]
         assert any("KEYCODE_ENDCALL" in c for c in calls)
 
+    def test_check_voice_type_pass(self, telephony_plugin):
+        snippet = MagicMock()
+        snippet.getVoiceNetworkType.return_value = 13  # LTE
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "vt1", "name": "Voice Type", "type": "telephony", "action": "check_voice_type"}
+        result = telephony_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert "LTE" in result.message
+
+    def test_check_voice_type_unknown(self, telephony_plugin):
+        snippet = MagicMock()
+        snippet.getVoiceNetworkType.return_value = 0  # UNKNOWN
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "vt1", "name": "Voice Type", "type": "telephony", "action": "check_voice_type"}
+        result = telephony_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+
+    def test_sim_info_pass(self, telephony_plugin):
+        snippet = MagicMock()
+        snippet.getLine1Number.return_value = "+886912345678"
+        snippet.getSubscriberId.return_value = "466920123456789"
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "si1", "name": "SIM Info", "type": "telephony", "action": "sim_info"}
+        result = telephony_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert "+886912345678" in result.message
+        # IMSI should be masked
+        assert "46692" in result.message
+        assert "0123456789" not in result.message
+
+    def test_sim_info_empty(self, telephony_plugin):
+        snippet = MagicMock()
+        snippet.getLine1Number.return_value = ""
+        snippet.getSubscriberId.return_value = ""
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "si1", "name": "SIM Info", "type": "telephony", "action": "sim_info"}
+        result = telephony_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+
 
 class TestWifiPlugin:
     @pytest.fixture
@@ -503,6 +542,69 @@ class TestWifiPlugin:
         result = wifi_plugin.execute(tc, ctx)
         assert result.status == TestStatus.FAIL
         assert "Target" in result.message
+
+    def test_toggle_pass(self, wifi_plugin):
+        snippet = MagicMock()
+        snippet.wifiIsEnabled.return_value = True
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "w3", "name": "WiFi Toggle", "type": "wifi", "action": "toggle"}
+        with patch("smoke_test_ai.plugins.wifi.time.sleep"):
+            result = wifi_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        snippet.wifiDisable.assert_called_once()
+        snippet.wifiEnable.assert_called_once()
+
+    def test_connection_info_pass(self, wifi_plugin):
+        snippet = MagicMock()
+        snippet.wifiGetConnectionInfo.return_value = {"SSID": "TestAP", "rssi": -50, "linkSpeed": 72}
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "w4", "name": "WiFi Info", "type": "wifi", "action": "connection_info", "params": {"min_rssi": -80}}
+        result = wifi_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert "TestAP" in result.message
+
+    def test_connection_info_weak_signal(self, wifi_plugin):
+        snippet = MagicMock()
+        snippet.wifiGetConnectionInfo.return_value = {"SSID": "WeakAP", "rssi": -90, "linkSpeed": 10}
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "w4", "name": "WiFi Info", "type": "wifi", "action": "connection_info", "params": {"min_rssi": -80}}
+        result = wifi_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+        assert "-90" in result.message
+
+    def test_dhcp_info_pass(self, wifi_plugin):
+        snippet = MagicMock()
+        snippet.wifiGetDhcpInfo.return_value = {"ipAddress": 3232235876, "gateway": 3232235777, "dns1": 134744072}
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "w5", "name": "DHCP", "type": "wifi", "action": "dhcp_info"}
+        result = wifi_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+
+    def test_dhcp_info_no_ip(self, wifi_plugin):
+        snippet = MagicMock()
+        snippet.wifiGetDhcpInfo.return_value = {"ipAddress": 0, "gateway": 0, "dns1": 0}
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "w5", "name": "DHCP", "type": "wifi", "action": "dhcp_info"}
+        result = wifi_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+
+    def test_capability_check_5ghz(self, wifi_plugin):
+        snippet = MagicMock()
+        snippet.wifiIs5GHzBandSupported.return_value = True
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "w6", "name": "5GHz", "type": "wifi", "action": "is_5ghz_supported"}
+        result = wifi_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert "5GHz" in result.message
+
+    def test_hotspot_pass(self, wifi_plugin):
+        snippet = MagicMock()
+        snippet.wifiIsApEnabled.return_value = True
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "w7", "name": "Hotspot", "type": "wifi", "action": "hotspot"}
+        with patch("smoke_test_ai.plugins.wifi.time.sleep"):
+            result = wifi_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
 
 
 class TestBluetoothPlugin:
@@ -582,6 +684,65 @@ class TestBluetoothPlugin:
         # bleStopScan not called because bleStartScan failed (handler=None, no callback_id)
         snippet.bleStopScan.assert_not_called()
 
+    def test_toggle_pass(self, bt_plugin):
+        snippet = MagicMock()
+        snippet.btIsEnabled.return_value = True
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "bt2", "name": "BT Toggle", "type": "bluetooth", "action": "toggle"}
+        with patch("smoke_test_ai.plugins.bluetooth.time.sleep"):
+            result = bt_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        snippet.btDisable.assert_called_once()
+        snippet.btEnable.assert_called_once()
+
+    def test_classic_scan_pass(self, bt_plugin):
+        snippet = MagicMock()
+        snippet.btDiscoverAndGetResults.return_value = [{"name": "Speaker", "address": "AA:BB:CC:DD:EE:FF"}]
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "bt3", "name": "Classic Scan", "type": "bluetooth", "action": "classic_scan"}
+        result = bt_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert "1" in result.message
+
+    def test_adapter_info_pass(self, bt_plugin):
+        snippet = MagicMock()
+        snippet.btGetName.return_value = "MyDevice"
+        snippet.btGetAddress.return_value = "AA:BB:CC:DD:EE:FF"
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "bt4", "name": "Adapter Info", "type": "bluetooth", "action": "adapter_info"}
+        result = bt_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert "MyDevice" in result.message
+
+    def test_paired_devices(self, bt_plugin):
+        snippet = MagicMock()
+        snippet.btGetPairedDevices.return_value = []
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "bt5", "name": "Paired", "type": "bluetooth", "action": "paired_devices"}
+        result = bt_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+
+    def test_ble_advertise_pass(self, bt_plugin):
+        snippet = MagicMock()
+        handler = MagicMock()
+        handler.callback_id = "adv-1"
+        snippet.bleStartAdvertising.return_value = handler
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "bt6", "name": "BLE Adv", "type": "bluetooth", "action": "ble_advertise", "params": {"duration": 0}}
+        with patch("smoke_test_ai.plugins.bluetooth.time.sleep"):
+            result = bt_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        snippet.bleStopAdvertising.assert_called_once_with("adv-1")
+
+    def test_le_audio_supported(self, bt_plugin):
+        snippet = MagicMock()
+        snippet.btIsLeAudioSupported.return_value = False
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "bt7", "name": "LE Audio", "type": "bluetooth", "action": "le_audio_supported"}
+        result = bt_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert "not supported" in result.message
+
 
 class TestAudioPlugin:
     @pytest.fixture
@@ -653,6 +814,54 @@ class TestAudioPlugin:
             result = audio_plugin.execute(tc, ctx)
         assert result.status == TestStatus.FAIL
         snippet.mediaStop.assert_called_once()
+
+    def test_volume_control_pass(self, audio_plugin):
+        snippet = MagicMock()
+        snippet.getMusicVolume.return_value = 7
+        snippet.getMusicMaxVolume.return_value = 15
+        snippet.setMusicVolume.return_value = None
+        # After set, readback returns target (15//2 = 7)
+        snippet.getMusicVolume.side_effect = [7, 7]  # original, after set
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "a2", "name": "Volume", "type": "audio", "action": "volume_control"}
+        result = audio_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+
+    def test_microphone_test_pass(self, audio_plugin):
+        snippet = MagicMock()
+        snippet.isMicrophoneMute.return_value = True
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "a3", "name": "Mic", "type": "audio", "action": "microphone_test"}
+        result = audio_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert snippet.setMicrophoneMute.call_count == 2  # mute + unmute
+
+    def test_list_devices_pass(self, audio_plugin):
+        snippet = MagicMock()
+        snippet.getAudioDeviceTypes.return_value = ["speaker", "earpiece"]
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "a4", "name": "Devices", "type": "audio", "action": "list_devices"}
+        result = audio_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert "2" in result.message
+
+    def test_list_devices_empty(self, audio_plugin):
+        snippet = MagicMock()
+        snippet.getAudioDeviceTypes.return_value = []
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "a4", "name": "Devices", "type": "audio", "action": "list_devices"}
+        result = audio_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+
+    def test_audio_route_pass(self, audio_plugin):
+        snippet = MagicMock()
+        snippet.mediaGetLiveAudioRouteType.return_value = 2
+        snippet.mediaGetLiveAudioRouteName.return_value = "Speaker"
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "a5", "name": "Route", "type": "audio", "action": "audio_route"}
+        result = audio_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert "Speaker" in result.message
 
 
 class TestNetworkPlugin:
