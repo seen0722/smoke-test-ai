@@ -55,11 +55,17 @@ class TestCameraPlugin:
 
     def test_capture_photo_pass(self, camera_plugin, plugin_context):
         adb = plugin_context.adb
+        ok = MagicMock(stdout="", returncode=0)
         adb.shell.side_effect = [
-            MagicMock(stdout="IMG_20260101.jpg\n", returncode=0),  # baseline ls
-            MagicMock(stdout="", returncode=0),                     # am start
-            MagicMock(stdout="", returncode=0),                     # keyevent
-            MagicMock(stdout="IMG_20260301.jpg\n", returncode=0),  # after ls
+            ok,                                                     # mkdir -p
+            MagicMock(stdout="IMG_old.jpg\n", returncode=0),       # baseline ls path1
+            MagicMock(stdout="\n", returncode=0),                  # baseline ls path2
+            MagicMock(stdout="\n", returncode=0),                  # baseline ls path3
+            ok,                                                     # force-stop
+            MagicMock(stdout="Starting: Intent\n", returncode=0),  # am start (direct launcher)
+            ok,                                                     # ENTER (dismiss tutorial)
+            ok,                                                     # KEYCODE_VOLUME_DOWN
+            MagicMock(stdout="IMG_new.jpg\n", returncode=0),       # after ls path1
             MagicMock(stdout="1234567\n", returncode=0),           # stat size
         ]
         tc = {
@@ -69,16 +75,24 @@ class TestCameraPlugin:
         }
         result = camera_plugin.execute(tc, plugin_context)
         assert result.status == TestStatus.PASS
-        assert "IMG_20260301.jpg" in result.message
+        assert "IMG_new.jpg" in result.message
         assert "1234567" in result.message
 
     def test_capture_photo_no_new_file(self, camera_plugin, plugin_context):
         adb = plugin_context.adb
+        ok = MagicMock(stdout="", returncode=0)
         adb.shell.side_effect = [
-            MagicMock(stdout="IMG_20260101.jpg\n", returncode=0),  # baseline
-            MagicMock(stdout="", returncode=0),                     # am start
-            MagicMock(stdout="", returncode=0),                     # keyevent
-            MagicMock(stdout="IMG_20260101.jpg\n", returncode=0),  # same file
+            ok,                                                     # mkdir -p
+            MagicMock(stdout="IMG_old.jpg\n", returncode=0),       # baseline ls path1
+            MagicMock(stdout="\n", returncode=0),                  # baseline ls path2
+            MagicMock(stdout="\n", returncode=0),                  # baseline ls path3
+            ok,                                                     # force-stop
+            MagicMock(stdout="Starting: Intent\n", returncode=0),  # am start (direct launcher)
+            ok,                                                     # ENTER (dismiss tutorial)
+            ok,                                                     # KEYCODE_VOLUME_DOWN
+            MagicMock(stdout="IMG_old.jpg\n", returncode=0),       # after ls path1 (same)
+            MagicMock(stdout="\n", returncode=0),                  # after ls path2 (same)
+            MagicMock(stdout="\n", returncode=0),                  # after ls path3 (same)
         ]
         tc = {
             "id": "cam1", "name": "Camera", "type": "camera",
@@ -99,12 +113,18 @@ class TestCameraPlugin:
     def test_capture_and_verify_no_analyzer(self, camera_plugin, plugin_context):
         """capture_and_verify without visual_analyzer returns capture result."""
         adb = plugin_context.adb
+        ok = MagicMock(stdout="", returncode=0)
         adb.shell.side_effect = [
-            MagicMock(stdout="IMG_old.jpg\n", returncode=0),
-            MagicMock(stdout="", returncode=0),
-            MagicMock(stdout="", returncode=0),
-            MagicMock(stdout="IMG_new.jpg\n", returncode=0),
-            MagicMock(stdout="5000\n", returncode=0),
+            ok,                                                     # mkdir -p
+            MagicMock(stdout="IMG_old.jpg\n", returncode=0),       # baseline ls path1
+            MagicMock(stdout="\n", returncode=0),                  # baseline ls path2
+            MagicMock(stdout="\n", returncode=0),                  # baseline ls path3
+            ok,                                                     # force-stop
+            MagicMock(stdout="Starting: Intent\n", returncode=0),  # am start (direct launcher)
+            ok,                                                     # ENTER (dismiss tutorial)
+            ok,                                                     # KEYCODE_VOLUME_DOWN
+            MagicMock(stdout="IMG_new.jpg\n", returncode=0),       # after ls path1
+            MagicMock(stdout="5000\n", returncode=0),              # stat size
         ]
         tc = {
             "id": "cv1", "name": "Verify", "type": "camera",
@@ -120,12 +140,18 @@ class TestCameraPlugin:
         analyzer = MagicMock()
         analyzer.analyze_test_screenshot.return_value = {"pass": True, "reason": "clear image"}
         adb = MagicMock()
+        ok = MagicMock(stdout="", returncode=0)
         adb.shell.side_effect = [
-            MagicMock(stdout="IMG_old.jpg\n", returncode=0),
-            MagicMock(stdout="", returncode=0),
-            MagicMock(stdout="", returncode=0),
-            MagicMock(stdout="IMG_new.jpg\n", returncode=0),
-            MagicMock(stdout="5000\n", returncode=0),
+            ok,                                                     # mkdir -p
+            MagicMock(stdout="IMG_old.jpg\n", returncode=0),       # baseline ls path1
+            MagicMock(stdout="\n", returncode=0),                  # baseline ls path2
+            MagicMock(stdout="\n", returncode=0),                  # baseline ls path3
+            ok,                                                     # force-stop
+            MagicMock(stdout="Starting: Intent\n", returncode=0),  # am start (direct launcher)
+            ok,                                                     # ENTER (dismiss tutorial)
+            ok,                                                     # KEYCODE_VOLUME_DOWN
+            MagicMock(stdout="IMG_new.jpg\n", returncode=0),       # after ls path1
+            MagicMock(stdout="5000\n", returncode=0),              # stat size
         ]
         # Mock adb.pull to actually create the file
         import tempfile
@@ -156,12 +182,18 @@ class TestCameraPlugin:
         analyzer = MagicMock()
         analyzer.analyze_test_screenshot.return_value = {"pass": False, "reason": "all black"}
         adb = MagicMock()
+        ok = MagicMock(stdout="", returncode=0)
         adb.shell.side_effect = [
-            MagicMock(stdout="IMG_old.jpg\n", returncode=0),
-            MagicMock(stdout="", returncode=0),
-            MagicMock(stdout="", returncode=0),
-            MagicMock(stdout="IMG_new.jpg\n", returncode=0),
-            MagicMock(stdout="5000\n", returncode=0),
+            ok,                                                     # mkdir -p
+            MagicMock(stdout="IMG_old.jpg\n", returncode=0),       # baseline path1
+            MagicMock(stdout="\n", returncode=0),                  # baseline path2
+            MagicMock(stdout="\n", returncode=0),                  # baseline path3
+            ok,                                                     # force-stop
+            MagicMock(stdout="Starting: Intent\n", returncode=0),  # am start (direct launcher)
+            ok,                                                     # ENTER (dismiss tutorial)
+            ok,                                                     # KEYCODE_VOLUME_DOWN
+            MagicMock(stdout="IMG_new.jpg\n", returncode=0),       # after ls path1
+            MagicMock(stdout="5000\n", returncode=0),              # stat size
         ]
 
         def fake_pull(remote, local):

@@ -35,32 +35,59 @@ class CameraPlugin(TestPlugin):
         wait_seconds = params.get("wait_seconds", 5)
         adb = ctx.adb
 
-        # 1. Record baseline: newest file in DCIM
-        baseline = adb.shell(f"ls -t '{DCIM_PATH}/' | head -1").stdout.strip()
+        # Ensure DCIM/Camera directory exists
+        adb.shell(f"mkdir -p '{DCIM_PATH}'")
 
-        # 2. Launch camera
+        # 1. Record baseline: newest file in DCIM (check multiple paths)
+        dcim_paths = [DCIM_PATH, "/sdcard/DCIM", "/sdcard/Pictures"]
+        baselines = {}
+        for dp in dcim_paths:
+            out = adb.shell(f"ls -t '{dp}/' 2>/dev/null | head -1").stdout.strip()
+            baselines[dp] = out
+
+        # 2. Launch camera in standalone mode (not IMAGE_CAPTURE intent, which
+        #    shows a confirm dialog and doesn't auto-save). Direct launch saves
+        #    photos immediately to DCIM.
+        adb.shell("am force-stop org.codeaurora.snapcam 2>/dev/null; "
+                   "am force-stop com.android.camera2 2>/dev/null")
         camera_id = 0 if camera == "back" else 1
-        adb.shell(
-            f"am start -a android.media.action.IMAGE_CAPTURE "
-            f"--ei android.intent.extras.CAMERA_FACING {camera_id}"
+        # Try direct camera launcher first; fall back to generic STILL_IMAGE intent
+        launch_result = adb.shell(
+            "am start -n org.codeaurora.snapcam/com.android.camera.CameraLauncher 2>&1"
         )
+        launch_out = launch_result.stdout if hasattr(launch_result, "stdout") else str(launch_result)
+        if "Error" in launch_out or "does not exist" in launch_out:
+            adb.shell(f"am start -a android.media.action.STILL_IMAGE_CAMERA "
+                       f"--ei android.intent.extras.CAMERA_FACING {camera_id}")
+        time.sleep(3)
+        # Dismiss first-launch tutorial / permission dialog if present
+        adb.shell("input keyevent KEYCODE_ENTER")
         time.sleep(2)
 
-        # 3. Trigger shutter
-        adb.shell("input keyevent KEYCODE_CAMERA")
+        # 3. Trigger shutter via VOLUME_DOWN (standard hardware shutter)
+        adb.shell("input keyevent KEYCODE_VOLUME_DOWN")
         if wait_seconds > 0:
             time.sleep(wait_seconds)
 
-        # 4. Check for new file
-        newest = adb.shell(f"ls -t '{DCIM_PATH}/' | head -1").stdout.strip()
-        if not newest or newest == baseline:
+        # 4. Check for new file across all candidate paths
+        found_path = ""
+        found_file = ""
+        for dp in dcim_paths:
+            newest = adb.shell(f"ls -t '{dp}/' 2>/dev/null | head -1").stdout.strip()
+            if newest and newest != baselines.get(dp, ""):
+                found_path = dp
+                found_file = newest
+                break
+
+        if not found_file:
             return TestResult(
                 id=tid, name=tname, status=TestStatus.FAIL,
-                message=f"No new photo in {DCIM_PATH}/ (newest: {newest})",
+                message=f"No new photo in {dcim_paths} (baselines: {baselines})",
             ), ""
 
         # 5. Check file size > 0
-        size_out = adb.shell(f"stat -c %s '{DCIM_PATH}/{newest}'").stdout.strip()
+        full_path = f"{found_path}/{found_file}"
+        size_out = adb.shell(f"stat -c %s '{full_path}'").stdout.strip()
         try:
             size = int(size_out)
         except ValueError:
@@ -68,16 +95,16 @@ class CameraPlugin(TestPlugin):
         if size == 0:
             return TestResult(
                 id=tid, name=tname, status=TestStatus.FAIL,
-                message=f"Photo {newest} has zero bytes",
+                message=f"Photo {found_file} has zero bytes",
             ), ""
 
         return TestResult(
             id=tid, name=tname, status=TestStatus.PASS,
-            message=f"Captured {newest} ({size} bytes, {camera} camera)",
-        ), newest
+            message=f"Captured {found_file} ({size} bytes, {camera} camera)",
+        ), full_path
 
     def _capture_and_verify(self, tc: dict, ctx: PluginContext) -> TestResult:
-        result, newest = self._do_capture(tc, ctx)
+        result, remote_path = self._do_capture(tc, ctx)
         if result.status != TestStatus.PASS:
             return result
 
@@ -90,11 +117,12 @@ class CameraPlugin(TestPlugin):
         adb = ctx.adb
 
         # Pull photo to temp path and verify with LLM
+        filename = Path(remote_path).name if remote_path else ""
         with tempfile.TemporaryDirectory() as tmp:
-            local_path = Path(tmp) / newest
+            local_path = Path(tmp) / filename if filename else Path(tmp) / "photo.jpg"
             image = None
-            if hasattr(adb, "pull"):
-                adb.pull(f"{DCIM_PATH}/{newest}", str(local_path))
+            if hasattr(adb, "pull") and remote_path:
+                adb.pull(remote_path, str(local_path))
                 if local_path.exists() and cv2 is not None:
                     image = cv2.imread(str(local_path))
 

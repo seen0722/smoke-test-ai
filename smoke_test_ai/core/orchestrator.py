@@ -1,3 +1,4 @@
+import re
 import time
 from pathlib import Path
 from smoke_test_ai.drivers.adb_controller import AdbController
@@ -77,6 +78,75 @@ class Orchestrator:
             api_key=llm_cfg.get("api_key"),
             timeout=llm_cfg.get("timeout", 30),
         )
+
+    def _pre_test_setup(self, adb: AdbController, suite_config: dict | None) -> None:
+        """Install required APKs and clean previous test run data."""
+        logger.info("Pre-test setup: install & clean")
+
+        # 1. Auto-install Mobly Bundled Snippets APK if snippet tests exist
+        if suite_config and self._has_snippet_tests(suite_config):
+            snippet_pkg = "com.google.android.mobly.snippet.bundled"
+            check = adb.shell(f"pm list packages {snippet_pkg}")
+            installed = snippet_pkg in (check.stdout if hasattr(check, "stdout") else str(check))
+            if not installed:
+                # Look for the APK in common locations
+                apk_candidates = [
+                    Path("apks/mobly-bundled-snippets.apk"),
+                    Path("apks/mobly-snippets.apk"),
+                    Path(__file__).parent.parent.parent / "apks" / "mobly-bundled-snippets.apk",
+                ]
+                apk_path = None
+                for candidate in apk_candidates:
+                    if candidate.exists():
+                        apk_path = candidate
+                        break
+                if apk_path:
+                    logger.info(f"Installing Mobly Snippet APK: {apk_path}")
+                    adb.install(str(apk_path))
+                else:
+                    logger.warning(
+                        f"Mobly Snippet APK not found (searched: {[str(c) for c in apk_candidates]}). "
+                        "Install manually: adb install mobly-bundled-snippets.apk"
+                    )
+            else:
+                logger.info("Mobly Snippet APK already installed")
+
+        # 2. Clean previous test run data
+        # Clear crash log buffer so previous crashes don't affect this run
+        adb.shell("logcat -b crash -c")
+        # Remove previous camera test photos
+        adb.shell("rm -rf /sdcard/DCIM/Camera/*.jpg 2>/dev/null")
+        # Kill camera app to ensure clean state
+        adb.shell("am force-stop org.codeaurora.snapcam 2>/dev/null; "
+                   "am force-stop com.android.camera2 2>/dev/null")
+        # Grant camera permissions proactively
+        adb.shell("pm grant org.codeaurora.snapcam android.permission.CAMERA 2>/dev/null; "
+                   "pm grant org.codeaurora.snapcam android.permission.WRITE_EXTERNAL_STORAGE 2>/dev/null; "
+                   "pm grant org.codeaurora.snapcam android.permission.RECORD_AUDIO 2>/dev/null; "
+                   "pm grant org.codeaurora.snapcam android.permission.ACCESS_FINE_LOCATION 2>/dev/null")
+        logger.info("Pre-test cleanup complete")
+
+    def _resolve_variables(self, suite_config: dict) -> dict:
+        """Resolve ${VAR} placeholders in test suite config."""
+        var_map = {
+            "WIFI_SSID": self.settings.get("wifi", {}).get("ssid", ""),
+            "WIFI_PASSWORD": self.settings.get("wifi", {}).get("password", ""),
+            "PEER_PHONE_NUMBER": self.device_config.get("peer_phone_number", ""),
+            "PHONE_NUMBER": self.device_config.get("phone_number", ""),
+        }
+
+        def _substitute(obj):
+            if isinstance(obj, str):
+                def _replacer(m):
+                    return var_map.get(m.group(1), m.group(0))
+                return re.sub(r"\$\{(\w+)\}", _replacer, obj)
+            if isinstance(obj, dict):
+                return {k: _substitute(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [_substitute(v) for v in obj]
+            return obj
+
+        return _substitute(suite_config)
 
     @staticmethod
     def _has_snippet_tests(suite_config: dict) -> bool:
@@ -184,8 +254,15 @@ class Orchestrator:
         adb.shell("settings put system screen_off_timeout 1800000")
         adb.shell("input keyevent KEYCODE_WAKEUP")
 
+        # Pre-test setup: install Mobly Snippet APK and clean previous test data
+        self._pre_test_setup(adb, suite_config)
+
         # Collect device info for reports
         device_info = adb.get_device_info()
+
+        # Resolve ${VAR} placeholders before test execution
+        if suite_config:
+            suite_config = self._resolve_variables(suite_config)
 
         # Store suite_config for report generation
         self._suite_config = suite_config
