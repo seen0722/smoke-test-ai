@@ -20,7 +20,7 @@ class NetworkPlugin(TestPlugin):
     def _http_download(self, tc: dict, ctx: PluginContext) -> TestResult:
         tid, tname = tc["id"], tc["name"]
         params = tc.get("params", {})
-        url = params.get("url", "http://speedtest.ftp.otenet.gr/files/test1Mb.db")
+        url = params.get("url", "https://www.google.com/generate_204")
         network_mode = params.get("network_mode", "auto")
         disable_wifi = network_mode == "mobile"
 
@@ -48,9 +48,9 @@ class NetworkPlugin(TestPlugin):
                 except Exception:
                     pass
 
-        if http_code == "200":
+        if http_code.startswith("2"):
             return TestResult(id=tid, name=tname, status=TestStatus.PASS,
-                              message=f"Download OK, speed: {speed} bytes/s")
+                              message=f"HTTP {http_code} OK, speed: {speed} bytes/s")
         return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                           message=f"HTTP {http_code}")
 

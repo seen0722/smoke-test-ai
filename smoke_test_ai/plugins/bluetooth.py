@@ -23,20 +23,36 @@ class BluetoothPlugin(TestPlugin):
         params = tc.get("params", {})
         scan_duration = params.get("scan_duration", 5)
 
+        # bleStartScan is @AsyncRpc — Mobly handles the callbackId internally.
+        # Required args: scanFilters (JSONArray), scanSettings (JSONObject).
+        # Pass empty values for a generic scan.
+        handler = None
         try:
-            ctx.snippet.bleStartScan()
+            handler = ctx.snippet.bleStartScan([], {})
             time.sleep(scan_duration)
-            results = ctx.snippet.bleGetScanResults()
         except Exception as e:
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"BLE scan failed: {e}")
         finally:
             try:
-                ctx.snippet.bleStopScan()
+                # bleStopScan is @Rpc, takes callbackId as parameter
+                callback_id = handler.callback_id if handler else None
+                if callback_id:
+                    ctx.snippet.bleStopScan(callback_id)
             except Exception:
                 pass
 
-        count = len(results) if isinstance(results, list) else 0
+        # Collect scan result events that arrived during scan_duration
+        devices = []
+        if handler:
+            try:
+                while True:
+                    event = handler.waitAndGet("onScanResult", timeout=0.5)
+                    devices.append(event.data)
+            except Exception:
+                pass  # Timeout or no more events
+
+        count = len(devices)
         if count > 0:
             return TestResult(id=tid, name=tname, status=TestStatus.PASS,
                               message=f"Found {count} BLE devices")

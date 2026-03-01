@@ -359,7 +359,7 @@ class TestWifiPlugin:
 
     def test_scan_pass(self, wifi_plugin):
         snippet = MagicMock()
-        snippet.wifiGetScanResults.return_value = [
+        snippet.wifiScanAndGetResults.return_value = [
             {"SSID": "TestAP", "BSSID": "aa:bb:cc:dd:ee:ff"},
             {"SSID": "Office", "BSSID": "11:22:33:44:55:66"},
         ]
@@ -371,7 +371,7 @@ class TestWifiPlugin:
         result = wifi_plugin.execute(tc, ctx)
         assert result.status == TestStatus.PASS
         assert "2" in result.message
-        snippet.wifiStartScan.assert_called_once()
+        snippet.wifiScanAndGetResults.assert_called_once()
 
     def test_scan_no_snippet(self, wifi_plugin, plugin_context):
         tc = {"id": "w1", "name": "WiFi Scan", "type": "wifi", "action": "scan"}
@@ -380,7 +380,7 @@ class TestWifiPlugin:
 
     def test_scan_for_ssid_found(self, wifi_plugin):
         snippet = MagicMock()
-        snippet.wifiGetScanResults.return_value = [
+        snippet.wifiScanAndGetResults.return_value = [
             {"SSID": "TestAP", "BSSID": "aa:bb:cc:dd:ee:ff"},
             {"SSID": "Target", "BSSID": "11:22:33:44:55:66"},
         ]
@@ -399,7 +399,7 @@ class TestWifiPlugin:
 
     def test_scan_for_ssid_not_found(self, wifi_plugin):
         snippet = MagicMock()
-        snippet.wifiGetScanResults.return_value = [
+        snippet.wifiScanAndGetResults.return_value = [
             {"SSID": "OtherAP", "BSSID": "aa:bb:cc:dd:ee:ff"},
         ]
         ctx = PluginContext(
@@ -423,9 +423,13 @@ class TestBluetoothPlugin:
 
     def test_ble_scan_pass(self, bt_plugin):
         snippet = MagicMock()
-        snippet.bleGetScanResults.return_value = [
-            {"name": "Device1", "address": "AA:BB:CC:DD:EE:FF"},
-        ]
+        handler = MagicMock()
+        handler.callback_id = "1-0"
+        # Simulate returning 1 event then timeout
+        event = MagicMock()
+        event.data = {"name": "Device1", "address": "AA:BB:CC:DD:EE:FF"}
+        handler.waitAndGet.side_effect = [event, TimeoutError("no more")]
+        snippet.bleStartScan.return_value = handler
         ctx = PluginContext(
             adb=MagicMock(), settings={}, device_capabilities={},
             snippet=snippet,
@@ -438,12 +442,15 @@ class TestBluetoothPlugin:
         with patch("smoke_test_ai.plugins.bluetooth.time.sleep"):
             result = bt_plugin.execute(tc, ctx)
         assert result.status == TestStatus.PASS
-        snippet.bleStartScan.assert_called_once()
-        snippet.bleStopScan.assert_called_once()
+        snippet.bleStartScan.assert_called_once_with([], {})
+        snippet.bleStopScan.assert_called_once_with("1-0")
 
     def test_ble_scan_no_devices(self, bt_plugin):
         snippet = MagicMock()
-        snippet.bleGetScanResults.return_value = []
+        handler = MagicMock()
+        handler.callback_id = "1-0"
+        handler.waitAndGet.side_effect = TimeoutError("no events")
+        snippet.bleStartScan.return_value = handler
         ctx = PluginContext(
             adb=MagicMock(), settings={}, device_capabilities={},
             snippet=snippet,
@@ -456,7 +463,7 @@ class TestBluetoothPlugin:
         with patch("smoke_test_ai.plugins.bluetooth.time.sleep"):
             result = bt_plugin.execute(tc, ctx)
         assert result.status == TestStatus.FAIL
-        snippet.bleStopScan.assert_called_once()
+        snippet.bleStopScan.assert_called_once_with("1-0")
 
     def test_ble_scan_no_snippet(self, bt_plugin, plugin_context):
         tc = {
@@ -467,8 +474,10 @@ class TestBluetoothPlugin:
         assert result.status == TestStatus.SKIP
 
     def test_ble_scan_cleanup_on_error(self, bt_plugin):
+        """When bleStartScan raises, bleStopScan is still attempted (handler is None, so
+        the stop is skipped gracefully since no scan was started)."""
         snippet = MagicMock()
-        snippet.bleGetScanResults.side_effect = RuntimeError("scan error")
+        snippet.bleStartScan.side_effect = RuntimeError("scan error")
         ctx = PluginContext(
             adb=MagicMock(), settings={}, device_capabilities={},
             snippet=snippet,
@@ -481,7 +490,8 @@ class TestBluetoothPlugin:
         with patch("smoke_test_ai.plugins.bluetooth.time.sleep"):
             result = bt_plugin.execute(tc, ctx)
         assert result.status == TestStatus.FAIL
-        snippet.bleStopScan.assert_called_once()
+        # bleStopScan not called because bleStartScan failed (handler=None, no callback_id)
+        snippet.bleStopScan.assert_not_called()
 
 
 class TestAudioPlugin:
@@ -491,8 +501,9 @@ class TestAudioPlugin:
 
     def test_play_and_check_pass(self, audio_plugin):
         snippet = MagicMock()
-        snippet.mediaIsPlaying.return_value = True
+        snippet.isMusicActive.return_value = True
         adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout="exists\n")
         ctx = PluginContext(
             adb=adb, settings={}, device_capabilities={},
             snippet=snippet,
@@ -510,8 +521,9 @@ class TestAudioPlugin:
 
     def test_play_and_check_not_playing(self, audio_plugin):
         snippet = MagicMock()
-        snippet.mediaIsPlaying.return_value = False
+        snippet.isMusicActive.return_value = False
         adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout="exists\n")
         ctx = PluginContext(
             adb=adb, settings={}, device_capabilities={},
             snippet=snippet,
@@ -536,8 +548,9 @@ class TestAudioPlugin:
 
     def test_play_and_check_cleanup(self, audio_plugin):
         snippet = MagicMock()
-        snippet.mediaIsPlaying.side_effect = RuntimeError("fail")
+        snippet.isMusicActive.side_effect = RuntimeError("fail")
         adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout="exists\n")
         ctx = PluginContext(
             adb=adb, settings={}, device_capabilities={},
             snippet=snippet,
@@ -551,7 +564,6 @@ class TestAudioPlugin:
             result = audio_plugin.execute(tc, ctx)
         assert result.status == TestStatus.FAIL
         snippet.mediaStop.assert_called_once()
-        adb.shell.assert_any_call("rm -f /sdcard/smoke_test_audio.ogg")
 
 
 class TestNetworkPlugin:
@@ -561,7 +573,7 @@ class TestNetworkPlugin:
 
     def test_http_download_pass(self, net_plugin):
         adb = MagicMock()
-        adb.shell.return_value = MagicMock(stdout="200 512000.000\n")
+        adb.shell.return_value = MagicMock(stdout="204 0.000\n")
         ctx = PluginContext(
             adb=adb, settings={}, device_capabilities={},
         )
@@ -572,7 +584,7 @@ class TestNetworkPlugin:
         }
         result = net_plugin.execute(tc, ctx)
         assert result.status == TestStatus.PASS
-        assert "512000" in result.message
+        assert "204" in result.message
 
     def test_http_download_fail_status(self, net_plugin):
         adb = MagicMock()

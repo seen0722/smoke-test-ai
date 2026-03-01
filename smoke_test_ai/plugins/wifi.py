@@ -15,14 +15,22 @@ class WifiPlugin(TestPlugin):
             message=f"Unknown wifi action: {action}",
         )
 
+    def _do_scan(self, ctx: PluginContext) -> list:
+        """Run WiFi scan and return results list."""
+        # wifiScanAndGetResults() = scan + wait + return (combo RPC)
+        # Fallback to wifiStartScan + wifiGetCachedScanResults
+        if hasattr(ctx.snippet, "wifiScanAndGetResults"):
+            return ctx.snippet.wifiScanAndGetResults()
+        ctx.snippet.wifiStartScan()
+        return ctx.snippet.wifiGetCachedScanResults()
+
     def _scan(self, tc: dict, ctx: PluginContext) -> TestResult:
         tid, tname = tc["id"], tc["name"]
         if not ctx.snippet:
             return TestResult(id=tid, name=tname, status=TestStatus.SKIP,
                               message="Snippet not available")
         try:
-            ctx.snippet.wifiStartScan()
-            results = ctx.snippet.wifiGetScanResults()
+            results = self._do_scan(ctx)
         except Exception as e:
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"WiFi scan failed: {e}")
@@ -43,8 +51,7 @@ class WifiPlugin(TestPlugin):
         expected_ssid = params.get("expected_ssid", "")
 
         try:
-            ctx.snippet.wifiStartScan()
-            results = ctx.snippet.wifiGetScanResults()
+            results = self._do_scan(ctx)
         except Exception as e:
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"WiFi scan failed: {e}")

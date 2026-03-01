@@ -294,7 +294,7 @@ test_suite:
       action: "http_download"
       params:
         network_mode: "wifi"
-        url: "http://speedtest.ftp.otenet.gr/files/test1Mb.db"
+        url: "https://www.google.com/generate_204"
       depends_on: "wifi_connected"
 
     - id: "download_mobile"

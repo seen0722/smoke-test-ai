@@ -109,7 +109,7 @@ class TestPlanReporter:
             params = tc.get("params", {})
             if action == "http_download":
                 mode = params.get("network_mode", "auto")
-                return f"HTTP download returns 200 OK (mode: {mode})"
+                return f"HTTP download returns 2xx OK (mode: {mode})"
             if action == "tcp_connect":
                 return f"TCP connection to {params.get('host', '8.8.8.8')}:{params.get('port', 443)} succeeds"
             return f"Network action: {action}"
