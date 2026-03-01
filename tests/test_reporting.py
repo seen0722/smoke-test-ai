@@ -221,3 +221,101 @@ class TestTestPlanReporter:
         )
         reporter.generate(suite_config=sample_suite_config, output_path=output)
         assert output.exists()
+
+
+@pytest.fixture
+def suite_config_with_plugins():
+    return {
+        "test_suite": {
+            "name": "Functional Smoke Test",
+            "timeout": 600,
+            "tests": [
+                {
+                    "id": "sms_send",
+                    "name": "SMS Send",
+                    "type": "telephony",
+                    "action": "send_sms",
+                    "params": {"to_number": "+886900000000", "body": "test"},
+                },
+                {
+                    "id": "sms_receive",
+                    "name": "SMS Receive",
+                    "type": "telephony",
+                    "action": "receive_sms",
+                    "params": {"body": "test", "timeout": 30},
+                },
+                {
+                    "id": "signal_check",
+                    "name": "Signal Check",
+                    "type": "telephony",
+                    "action": "check_signal",
+                    "params": {"expected_data_type": "LTE|NR"},
+                },
+                {
+                    "id": "cam_back",
+                    "name": "Rear Camera",
+                    "type": "camera",
+                    "action": "capture_photo",
+                    "params": {"camera": "back"},
+                },
+                {
+                    "id": "cam_verify",
+                    "name": "Photo Verify",
+                    "type": "camera",
+                    "action": "capture_and_verify",
+                    "params": {"camera": "back", "verify_prompt": "Is photo clear?"},
+                },
+            ],
+        }
+    }
+
+
+class TestTestPlanReporterPluginTypes:
+    def test_telephony_send_criteria(self, suite_config_with_plugins, tmp_path):
+        output = tmp_path / "plan.html"
+        reporter = TestPlanReporter(
+            template_dir=Path(__file__).parent.parent / "templates"
+        )
+        reporter.generate(suite_config=suite_config_with_plugins, output_path=output)
+        html = output.read_text()
+        assert "SMS sent to" in html
+        assert "+886900000000" in html
+
+    def test_telephony_receive_criteria(self, suite_config_with_plugins, tmp_path):
+        output = tmp_path / "plan.html"
+        reporter = TestPlanReporter(
+            template_dir=Path(__file__).parent.parent / "templates"
+        )
+        reporter.generate(suite_config=suite_config_with_plugins, output_path=output)
+        html = output.read_text()
+        assert "SMS received within" in html
+
+    def test_telephony_signal_criteria(self, suite_config_with_plugins, tmp_path):
+        output = tmp_path / "plan.html"
+        reporter = TestPlanReporter(
+            template_dir=Path(__file__).parent.parent / "templates"
+        )
+        reporter.generate(suite_config=suite_config_with_plugins, output_path=output)
+        html = output.read_text()
+        assert "Network type matches" in html
+        assert "LTE|NR" in html
+
+    def test_camera_capture_criteria(self, suite_config_with_plugins, tmp_path):
+        output = tmp_path / "plan.html"
+        reporter = TestPlanReporter(
+            template_dir=Path(__file__).parent.parent / "templates"
+        )
+        reporter.generate(suite_config=suite_config_with_plugins, output_path=output)
+        html = output.read_text()
+        assert "New photo file created in DCIM" in html
+        assert "back" in html
+
+    def test_camera_verify_criteria(self, suite_config_with_plugins, tmp_path):
+        output = tmp_path / "plan.html"
+        reporter = TestPlanReporter(
+            template_dir=Path(__file__).parent.parent / "templates"
+        )
+        reporter.generate(suite_config=suite_config_with_plugins, output_path=output)
+        html = output.read_text()
+        assert "LLM verified" in html
+        assert "Is photo clear?" in html

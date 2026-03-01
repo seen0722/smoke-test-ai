@@ -21,7 +21,7 @@ class TestPlanReporter:
                 "id": tc["id"],
                 "name": tc["name"],
                 "type": tc["type"],
-                "command": tc.get("command") or tc.get("prompt", ""),
+                "command": tc.get("command") or tc.get("prompt") or tc.get("action", ""),
                 "pass_criteria_display": self._build_pass_criteria(tc),
                 "depends_on": tc.get("depends_on"),
                 "requires": tc.get("requires", {}).get("device_capability"),
@@ -68,5 +68,25 @@ class TestPlanReporter:
             pkg = tc.get("package", "")
             runner = tc.get("runner", "AndroidJUnitRunner")
             return f"Instrumentation passes ({pkg} / {runner})"
+
+        if t == "telephony":
+            action = tc.get("action", "")
+            params = tc.get("params", {})
+            if action == "send_sms":
+                return f"SMS sent to {params.get('to_number', 'peer')} without error"
+            if action == "receive_sms":
+                return f"SMS received within {params.get('timeout', 30)}s"
+            if action == "check_signal":
+                return f"Network type matches /{params.get('expected_data_type', '.*')}/"
+            return f"Telephony action: {action}"
+
+        if t == "camera":
+            action = tc.get("action", "")
+            params = tc.get("params", {})
+            if action == "capture_photo":
+                return f"New photo file created in DCIM ({params.get('camera', 'back')} camera)"
+            if action == "capture_and_verify":
+                return f"Photo captured and LLM verified: {params.get('verify_prompt', '')}"
+            return f"Camera action: {action}"
 
         return "Unknown test type"
