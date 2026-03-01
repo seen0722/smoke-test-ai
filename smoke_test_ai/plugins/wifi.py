@@ -127,9 +127,15 @@ class WifiPlugin(TestPlugin):
 
         # Wait for WiFi to be connected with valid RSSI (may follow a toggle test)
         info = {}
-        for _ in range(10):
+        for i in range(10):
             try:
                 if ctx.snippet.isWifiConnected():
+                    # Trigger a scan to refresh RSSI from the driver
+                    if i == 0:
+                        try:
+                            self._do_scan(ctx)
+                        except Exception:
+                            pass
                     info = ctx.snippet.wifiGetConnectionInfo()
                     if info.get("rssi", -999) != -999:
                         break
