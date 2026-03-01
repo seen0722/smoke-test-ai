@@ -175,6 +175,9 @@ class BluetoothPlugin(TestPlugin):
         try:
             supported = ctx.snippet.btIsLeAudioSupported()
         except Exception as e:
+            if "Unknown RPC" in str(e):
+                return TestResult(id=tid, name=tname, status=TestStatus.SKIP,
+                                  message="btIsLeAudioSupported not in installed Snippet APK")
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"btIsLeAudioSupported failed: {e}")
 

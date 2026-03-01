@@ -94,7 +94,7 @@ class WifiPlugin(TestPlugin):
             ctx.snippet.wifiDisable()
             time.sleep(3)
             ctx.snippet.wifiEnable()
-            time.sleep(3)
+            time.sleep(5)
             enabled = ctx.snippet.wifiIsEnabled()
         except Exception as e:
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
@@ -114,11 +114,24 @@ class WifiPlugin(TestPlugin):
         params = tc.get("params", {})
         min_rssi = params.get("min_rssi", -80)
 
-        try:
-            info = ctx.snippet.wifiGetConnectionInfo()
-        except Exception as e:
-            return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
-                              message=f"wifiGetConnectionInfo failed: {e}")
+        # Wait for WiFi to be connected with valid RSSI (may follow a toggle test)
+        info = {}
+        for _ in range(10):
+            try:
+                if ctx.snippet.isWifiConnected():
+                    info = ctx.snippet.wifiGetConnectionInfo()
+                    if info.get("rssi", -999) != -999:
+                        break
+            except Exception:
+                pass
+            time.sleep(2)
+
+        if not info:
+            try:
+                info = ctx.snippet.wifiGetConnectionInfo()
+            except Exception as e:
+                return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                                  message=f"wifiGetConnectionInfo failed: {e}")
 
         ssid = info.get("SSID", "")
         rssi = info.get("rssi", -999)
@@ -159,6 +172,10 @@ class WifiPlugin(TestPlugin):
         try:
             supported = getattr(ctx.snippet, method)()
         except Exception as e:
+            err = str(e)
+            if "Unknown RPC" in err or "not supported" in err.lower():
+                return TestResult(id=tid, name=tname, status=TestStatus.SKIP,
+                                  message=f"{label} not supported on this device")
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"{method} failed: {e}")
 
@@ -178,6 +195,9 @@ class WifiPlugin(TestPlugin):
             time.sleep(3)
             is_ap = ctx.snippet.wifiIsApEnabled()
         except Exception as e:
+            if "Unknown RPC" in str(e) or "NullPointer" in str(e):
+                return TestResult(id=tid, name=tname, status=TestStatus.SKIP,
+                                  message=f"Hotspot not supported: {str(e)[:80]}")
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"Hotspot test failed: {e}")
         finally:

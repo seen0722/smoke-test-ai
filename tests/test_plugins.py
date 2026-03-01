@@ -556,19 +556,23 @@ class TestWifiPlugin:
 
     def test_connection_info_pass(self, wifi_plugin):
         snippet = MagicMock()
+        snippet.isWifiConnected.return_value = True
         snippet.wifiGetConnectionInfo.return_value = {"SSID": "TestAP", "rssi": -50, "linkSpeed": 72}
         ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
         tc = {"id": "w4", "name": "WiFi Info", "type": "wifi", "action": "connection_info", "params": {"min_rssi": -80}}
-        result = wifi_plugin.execute(tc, ctx)
+        with patch("smoke_test_ai.plugins.wifi.time.sleep"):
+            result = wifi_plugin.execute(tc, ctx)
         assert result.status == TestStatus.PASS
         assert "TestAP" in result.message
 
     def test_connection_info_weak_signal(self, wifi_plugin):
         snippet = MagicMock()
+        snippet.isWifiConnected.return_value = True
         snippet.wifiGetConnectionInfo.return_value = {"SSID": "WeakAP", "rssi": -90, "linkSpeed": 10}
         ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
         tc = {"id": "w4", "name": "WiFi Info", "type": "wifi", "action": "connection_info", "params": {"min_rssi": -80}}
-        result = wifi_plugin.execute(tc, ctx)
+        with patch("smoke_test_ai.plugins.wifi.time.sleep"):
+            result = wifi_plugin.execute(tc, ctx)
         assert result.status == TestStatus.FAIL
         assert "-90" in result.message
 
@@ -596,6 +600,17 @@ class TestWifiPlugin:
         result = wifi_plugin.execute(tc, ctx)
         assert result.status == TestStatus.PASS
         assert "5GHz" in result.message
+
+    def test_capability_check_not_supported_skip(self, wifi_plugin):
+        snippet = MagicMock()
+        snippet.wifiAwareIsAvailable.side_effect = Exception(
+            "WifiAwareManagerSnippetException: WifiAware is not supported in this device"
+        )
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, snippet=snippet)
+        tc = {"id": "w8", "name": "Aware", "type": "wifi", "action": "is_aware_available"}
+        result = wifi_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.SKIP
+        assert "not supported" in result.message
 
     def test_hotspot_pass(self, wifi_plugin):
         snippet = MagicMock()

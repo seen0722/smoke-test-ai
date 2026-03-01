@@ -152,6 +152,9 @@ class AudioPlugin(TestPlugin):
         try:
             devices = ctx.snippet.getAudioDeviceTypes()
         except Exception as e:
+            if "Unknown RPC" in str(e):
+                return TestResult(id=tid, name=tname, status=TestStatus.SKIP,
+                                  message="getAudioDeviceTypes not in installed Snippet APK")
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"getAudioDeviceTypes failed: {e}")
 
@@ -171,6 +174,9 @@ class AudioPlugin(TestPlugin):
             route_type = ctx.snippet.mediaGetLiveAudioRouteType()
             route_name = ctx.snippet.mediaGetLiveAudioRouteName()
         except Exception as e:
+            if "Unknown RPC" in str(e):
+                return TestResult(id=tid, name=tname, status=TestStatus.SKIP,
+                                  message="Audio route RPC not in installed Snippet APK")
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"Audio route query failed: {e}")
 
