@@ -159,7 +159,7 @@ Plugin 系統讓你可以新增需要 Android API 存取的功能測試，而不
 smoke_test_ai/plugins/
 ├── __init__.py          # TestPlugin, PluginContext exports
 ├── base.py              # TestPlugin ABC + PluginContext dataclass
-├── camera.py            # CameraPlugin — ADB intent 拍照 + LLM 驗證
+├── camera.py            # CameraPlugin — 直接啟動相機拍照 + LLM 驗證
 ├── telephony.py         # TelephonyPlugin — SMS 收發 + 撥打電話 (Mobly Snippet)
 ├── wifi.py              # WifiPlugin — WiFi 掃描 (Mobly Snippet)
 ├── bluetooth.py         # BluetoothPlugin — BLE 裝置掃描 (Mobly Snippet)
@@ -173,8 +173,8 @@ smoke_test_ai/plugins/
 - `check_signal` — 查詢行動網路類型（LTE/NR/etc）
 - `make_call` — 撥打電話，確認通話狀態為 OFFHOOK
 
-**CameraPlugin** 使用 ADB shell intent，不需 Snippet：
-- `capture_photo` — 啟動相機 → 觸發快門 → 檢查 DCIM 新檔案
+**CameraPlugin** 使用 ADB 直接啟動相機，不需 Snippet：
+- `capture_photo` — 啟動相機（CameraLauncher 直接模式）→ VOLUME_DOWN 觸發快門 → 多路徑搜尋 DCIM 新檔案
 - `capture_and_verify` — 拍照後 pull 照片，用 LLM Vision 驗證品質
 
 **WifiPlugin** 使用 Mobly Snippet WiFi API：
@@ -192,6 +192,17 @@ smoke_test_ai/plugins/
 - `tcp_connect` — TCP 連通性測試
 
 新增 Plugin 只需：一個 Python 檔 + YAML 測試案例，無需修改 framework。
+
+### YAML 變數替換
+
+YAML 測試案例中可使用 `${VAR}` 變數，由 Orchestrator 在執行前自動替換：
+
+| 變數 | 來源 | 說明 |
+|------|------|------|
+| `${WIFI_SSID}` | `settings.yaml` → `wifi.ssid` | WiFi SSID |
+| `${WIFI_PASSWORD}` | `settings.yaml` → `wifi.password` | WiFi 密碼 |
+| `${PEER_PHONE_NUMBER}` | device config → `peer_phone_number` | Peer 裝置電話號碼 |
+| `${PHONE_NUMBER}` | device config → `phone_number` | DUT 電話號碼 |
 
 ## 內建測試套件 (smoke_basic — 41 項)
 
@@ -258,8 +269,10 @@ Stage 1: Setup Wizard (Pre-ADB)
     │  AOA2 HID 模擬觸控 + Webcam 截圖 + LLM Vision 分析
     │  自動完成語言選擇、WiFi 設定、Google 登入跳過等步驟
     ▼
-Stage 2: ADB Bootstrap
+Stage 2: ADB Bootstrap + Pre-test Setup
     │  等待 ADB 連線 → FBE 解鎖 → WiFi 連線 → 螢幕常亮 → 喚醒螢幕
+    │  自動安裝 Mobly Snippet APK → 清除上次測試資料 → 授予相機權限
+    │  解析 YAML 變數（${WIFI_SSID}、${PEER_PHONE_NUMBER} 等）
     ▼
 Stage 3: Test Execute
     │  依 YAML 測試套件逐項執行測試（含 Plugin 功能測試）
