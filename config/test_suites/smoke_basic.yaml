@@ -180,3 +180,65 @@ test_suite:
       type: "adb_shell"
       command: "dumpsys activity | head -1"
       expected_contains: "ACTIVITY MANAGER"
+
+    # === 功能測試：相機 ===
+    - id: "camera_rear_capture"
+      name: "後鏡頭拍照"
+      type: "camera"
+      action: "capture_photo"
+      params:
+        camera: "back"
+        wait_seconds: 5
+      depends_on: "camera_available"
+
+    - id: "camera_front_capture"
+      name: "前鏡頭拍照"
+      type: "camera"
+      action: "capture_photo"
+      params:
+        camera: "front"
+        wait_seconds: 5
+      depends_on: "camera_available"
+
+    - id: "camera_image_quality"
+      name: "照片品質驗證"
+      type: "camera"
+      action: "capture_and_verify"
+      params:
+        camera: "back"
+        wait_seconds: 5
+        verify_prompt: "照片是否清晰、非全黑、非全白、無明顯色偏？"
+      depends_on: "camera_rear_capture"
+
+    # === 功能測試：簡訊 ===
+    - id: "network_type"
+      name: "行動網路類型"
+      type: "telephony"
+      action: "check_signal"
+      params:
+        expected_data_type: "LTE|NR"
+      requires:
+        device_capability: "has_sim"
+      depends_on: "sim_status"
+
+    - id: "sms_send"
+      name: "SMS 簡訊發送"
+      type: "telephony"
+      action: "send_sms"
+      params:
+        to_number: "${PEER_PHONE_NUMBER}"
+        body: "smoke-test-outbound-{timestamp}"
+      requires:
+        device_capability: "has_sim"
+      depends_on: "sim_status"
+
+    - id: "sms_receive"
+      name: "SMS 簡訊接收"
+      type: "telephony"
+      action: "receive_sms"
+      params:
+        body: "smoke-test-inbound-{timestamp}"
+        timeout: 30
+      requires:
+        device_capability: "has_sim"
+      depends_on: "sms_send"

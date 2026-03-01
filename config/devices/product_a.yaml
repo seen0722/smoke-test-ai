@@ -5,6 +5,9 @@ device:
   has_sim: false
   has_dp_output: false
   lock_pin: "0000"              # FBE unlock PIN (omit if no PIN set)
+  # phone_number: "+886912345678"    # DUT SIM 電話號碼 (SMS 測試用)
+  # peer_serial: "PEER_SERIAL_123"  # Peer 裝置序號 (SMS 雙機測試)
+  # peer_phone_number: "+886900000000"
 
   flash:
     profile: "fastboot"
