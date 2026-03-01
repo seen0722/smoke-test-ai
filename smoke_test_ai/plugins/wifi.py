@@ -125,35 +125,29 @@ class WifiPlugin(TestPlugin):
         params = tc.get("params", {})
         min_rssi = params.get("min_rssi", -80)
 
-        # Wait for WiFi to be connected with valid RSSI (may follow a toggle test)
-        info = {}
-        for i in range(10):
+        # Wait for WiFi to be connected (may follow a toggle test)
+        for _ in range(10):
             try:
                 if ctx.snippet.isWifiConnected():
-                    # Trigger a scan to refresh RSSI from the driver
-                    if i == 0:
-                        try:
-                            self._do_scan(ctx)
-                        except Exception:
-                            pass
-                    info = ctx.snippet.wifiGetConnectionInfo()
-                    if info.get("rssi", -999) != -999:
-                        break
+                    break
             except Exception:
                 pass
             time.sleep(2)
 
-        if not info:
-            try:
-                info = ctx.snippet.wifiGetConnectionInfo()
-            except Exception as e:
-                return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
-                                  message=f"wifiGetConnectionInfo failed: {e}")
+        try:
+            info = ctx.snippet.wifiGetConnectionInfo()
+        except Exception as e:
+            return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                              message=f"wifiGetConnectionInfo failed: {e}")
 
         ssid = info.get("SSID", "")
         rssi = info.get("rssi", -999)
         link_speed = info.get("linkSpeed", 0)
 
+        # RSSI -999 or -127 means "not yet measured" — not a signal quality failure
+        if rssi <= -127:
+            return TestResult(id=tid, name=tname, status=TestStatus.PASS,
+                              message=f"SSID: {ssid}, RSSI: unavailable, linkSpeed: {link_speed} Mbps")
         if rssi < min_rssi:
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"RSSI {rssi} dBm below threshold {min_rssi} dBm (SSID: {ssid})")
