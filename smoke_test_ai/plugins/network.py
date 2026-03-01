@@ -49,8 +49,12 @@ class NetworkPlugin(TestPlugin):
                     pass
 
         if http_code.startswith("2"):
+            if http_code == "204":
+                msg = "HTTP 204 OK (connectivity check)"
+            else:
+                msg = f"HTTP {http_code} OK, speed: {speed} bytes/s"
             return TestResult(id=tid, name=tname, status=TestStatus.PASS,
-                              message=f"HTTP {http_code} OK, speed: {speed} bytes/s")
+                              message=msg)
         return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                           message=f"HTTP {http_code}")
 

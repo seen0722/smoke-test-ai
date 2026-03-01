@@ -666,7 +666,24 @@ class TestNetworkPlugin:
         }
         result = net_plugin.execute(tc, ctx)
         assert result.status == TestStatus.PASS
-        assert "204" in result.message
+        assert "connectivity check" in result.message
+        assert "speed" not in result.message
+
+    def test_http_download_pass_200(self, net_plugin):
+        adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout="200 100000.000\n")
+        ctx = PluginContext(
+            adb=adb, settings={}, device_capabilities={},
+        )
+        tc = {
+            "id": "n1", "name": "Download", "type": "network",
+            "action": "http_download",
+            "params": {"network_mode": "wifi"},
+        }
+        result = net_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert "speed" in result.message
+        assert "100000" in result.message
 
     def test_http_download_fail_status(self, net_plugin):
         adb = MagicMock()
