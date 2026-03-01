@@ -6,8 +6,8 @@ Android OS image 等級的全自動化 smoke test 框架。從 SCM build 完成�
 
 - **Pre-ADB 自動化** — 透過 AOA2 USB HID 模擬觸控/鍵盤，搭配 Webcam + LLM Vision 自動完成 Setup Wizard，不需要額外硬體
 - **5 階段 Pipeline** — Flash → Setup Wizard → ADB Bootstrap → 測試執行 → 報告產生
-- **Plugin 架構** — 可擴充的 Plugin 系統，支援真實功能測試（SMS 收發、相機拍照），不只是 framework 狀態檢查
-- **YAML 可客製化測試** — 以 YAML 定義測試套件，支援 6 種測試類型，不需改程式碼
+- **Plugin 架構** — 可擴充的 Plugin 系統，支援真實功能測試（SMS/電話、相機、WiFi/BLE 掃描、音頻、網路下載），不只是 framework 狀態檢查
+- **YAML 可客製化測試** — 以 YAML 定義測試套件，支援 4 種內建 + 6 種 Plugin 測試類型，不需改程式碼
 - **LLM 整合** — 支援 Ollama / OpenAI 相容 API，用於 UI 截圖判讀和測試報告生成
 - **螢幕喚醒防護** — 分層策略確保 user build（ADB 關閉）下螢幕不會自動關閉
 
@@ -55,7 +55,7 @@ cd smoke-test-ai
 python -m venv .venv
 source .venv/bin/activate
 pip install -e .
-pip install mobly  # 功能測試 plugin 需要 (SMS/Telephony)
+pip install mobly  # 功能測試 plugin 需要 (Telephony/WiFi/BLE/Audio/Network)
 
 # macOS: 安裝 libusb (AOA2 HID 需要)
 brew install libusb
@@ -184,8 +184,8 @@ smoke_test_ai/plugins/
 **BluetoothPlugin** 使用 Mobly Snippet BLE API：
 - `ble_scan` — BLE 裝置掃描，確認找到至少一個裝置
 
-**AudioPlugin** 使用 Mobly Snippet Media API：
-- `play_and_check` — 播放音頻檔案，確認 mediaIsPlaying() 回傳 true
+**AudioPlugin** 使用 Mobly Snippet Media/Audio API：
+- `play_and_check` — 播放系統音頻檔案，確認 isMusicActive() 回傳 true
 
 **NetworkPlugin** 使用 ADB curl + Mobly Snippet：
 - `http_download` — HTTP 下載測試，支援 WiFi/行動數據模式切換
@@ -202,7 +202,7 @@ smoke_test_ai/plugins/
 | 多媒體 | 相機可用、音效輸出 |
 | GPS | GPS Provider、GPS 定位 |
 | 藍牙 | 藍牙啟用、Adapter 存在、MAC 位址 |
-| NFC | NFC 啟用、NFC Adapter |
+| NFC | NFC 啟用 |
 | 感測器 | 加速度計、陀螺儀 |
 | 儲存/記憶體 | 內部儲存、記憶體資訊 |
 | 螢幕 | 螢幕亮度、自動旋轉 |
@@ -263,7 +263,7 @@ Stage 2: ADB Bootstrap
     ▼
 Stage 3: Test Execute
     │  依 YAML 測試套件逐項執行測試（含 Plugin 功能測試）
-    │  Mobly Snippet 自動載入（telephony 測試時）
+    │  Mobly Snippet 自動載入（telephony/wifi/bluetooth/audio/network 測試時）
     ▼
 Stage 4: Report
        CLI 表格 / JSON / HTML 報告 + Test Plan 輸出
