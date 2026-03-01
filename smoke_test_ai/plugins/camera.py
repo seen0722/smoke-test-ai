@@ -55,20 +55,15 @@ class CameraPlugin(TestPlugin):
             # Ensure DCIM/Camera directory exists
             adb.shell(f"mkdir -p '{DCIM_PATH}'")
 
-            # 1. Record baseline: newest file in DCIM (check multiple paths)
-            dcim_paths = [DCIM_PATH, "/sdcard/DCIM", "/sdcard/Pictures"]
-            baselines = {}
-            for dp in dcim_paths:
-                out = adb.shell(f"ls -t '{dp}/' 2>/dev/null | head -1").stdout.strip()
-                baselines[dp] = out
+            # 1. Create a timestamp marker for reliable new-file detection
+            marker = "/sdcard/.smoke_test_cam_marker"
+            adb.shell(f"touch {marker}")
+            time.sleep(0.5)
 
-            # 2. Launch camera in standalone mode (not IMAGE_CAPTURE intent, which
-            #    shows a confirm dialog and doesn't auto-save). Direct launch saves
-            #    photos immediately to DCIM.
+            # 2. Launch camera in standalone mode
             adb.shell("am force-stop org.codeaurora.snapcam 2>/dev/null; "
                        "am force-stop com.android.camera2 2>/dev/null")
             camera_id = 0 if camera == "back" else 1
-            # Try direct camera launcher first; fall back to generic STILL_IMAGE intent
             launch_result = adb.shell(
                 "am start -n org.codeaurora.snapcam/com.android.camera.CameraLauncher 2>&1"
             )
@@ -76,35 +71,36 @@ class CameraPlugin(TestPlugin):
             if "Error" in launch_out or "does not exist" in launch_out:
                 adb.shell(f"am start -a android.media.action.STILL_IMAGE_CAMERA "
                            f"--ei android.intent.extras.CAMERA_FACING {camera_id}")
-            time.sleep(3)
-            # Dismiss first-launch tutorial / permission dialog if present
-            adb.shell("input keyevent KEYCODE_ENTER")
-            time.sleep(2)
+            time.sleep(5)
 
-            # 3. Trigger shutter via VOLUME_DOWN (standard hardware shutter)
-            adb.shell("input keyevent KEYCODE_VOLUME_DOWN")
+            # 3. Trigger shutter — try dedicated camera key first, then volume
+            shutter_keys = ["KEYCODE_CAMERA", "KEYCODE_VOLUME_DOWN"]
+            for key in shutter_keys:
+                adb.shell(f"input keyevent {key}")
+                time.sleep(1)
+
             if wait_seconds > 0:
                 time.sleep(wait_seconds)
 
-            # 4. Check for new file across all candidate paths
-            found_path = ""
-            found_file = ""
-            for dp in dcim_paths:
-                newest = adb.shell(f"ls -t '{dp}/' 2>/dev/null | head -1").stdout.strip()
-                if newest and newest != baselines.get(dp, ""):
-                    found_path = dp
-                    found_file = newest
-                    break
+            # 4. Find new photo files created after the marker
+            found = self._find_new_photo(adb, marker)
 
-            if not found_file:
+            # 5. Retry once if not found — wait longer and check again
+            if not found:
+                time.sleep(5)
+                found = self._find_new_photo(adb, marker)
+
+            # Clean up marker
+            adb.shell(f"rm -f {marker}")
+
+            if not found:
                 return TestResult(
                     id=tid, name=tname, status=TestStatus.FAIL,
-                    message=f"No new photo in {dcim_paths} (baselines: {baselines})",
+                    message="No new photo after capture attempt",
                 ), ""
 
-            # 5. Check file size > 0
-            full_path = f"{found_path}/{found_file}"
-            size_out = adb.shell(f"stat -c %s '{full_path}'").stdout.strip()
+            # 6. Check file size > 0
+            size_out = adb.shell(f"stat -c %s '{found}'").stdout.strip()
             try:
                 size = int(size_out)
             except ValueError:
@@ -112,16 +108,30 @@ class CameraPlugin(TestPlugin):
             if size == 0:
                 return TestResult(
                     id=tid, name=tname, status=TestStatus.FAIL,
-                    message=f"Photo {found_file} has zero bytes",
+                    message=f"Photo {found} has zero bytes",
                 ), ""
 
+            filename = Path(found).name
             return TestResult(
                 id=tid, name=tname, status=TestStatus.PASS,
-                message=f"Captured {found_file} ({size} bytes, {camera} camera)",
-            ), full_path
+                message=f"Captured {filename} ({size} bytes, {camera} camera)",
+            ), found
         finally:
             adb.shell("am force-stop org.codeaurora.snapcam 2>/dev/null; "
                        "am force-stop com.android.camera2 2>/dev/null")
+
+    def _find_new_photo(self, adb, marker: str) -> str:
+        """Find the newest photo file created after the marker timestamp."""
+        search_dirs = [DCIM_PATH, "/sdcard/DCIM", "/sdcard/Pictures"]
+        for dp in search_dirs:
+            out = adb.shell(
+                f"find '{dp}' -maxdepth 1 -newer {marker} "
+                f"\\( -name '*.jpg' -o -name '*.jpeg' -o -name '*.png' \\) "
+                f"-type f 2>/dev/null | head -1"
+            ).stdout.strip()
+            if out:
+                return out
+        return ""
 
     def _capture_and_verify(self, tc: dict, ctx: PluginContext) -> TestResult:
         result, remote_path = self._do_capture(tc, ctx)
