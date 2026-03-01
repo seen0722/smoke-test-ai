@@ -234,8 +234,23 @@ class TestTelephonyPlugin:
         }
         result = telephony_plugin.execute(tc, ctx)
         assert result.status == TestStatus.PASS
-        peer_snippet.sendSms.assert_called_once()
+        dut_snippet.asyncWaitForSms.assert_called_once_with("sms_receive_cb")
+        peer_snippet.sendSms.assert_called_once_with("+886912345678", "smoke-test-inbound")
         dut_snippet.waitForSms.assert_called_once_with(10000)
+
+    def test_receive_sms_no_phone_number(self, telephony_plugin):
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=MagicMock(), peer_snippet=MagicMock(),
+        )
+        tc = {
+            "id": "sms2", "name": "SMS Receive", "type": "telephony",
+            "action": "receive_sms",
+            "params": {"body": "test", "timeout": 10},
+        }
+        result = telephony_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.SKIP
+        assert "phone_number" in result.message.lower()
 
     def test_receive_sms_no_peer(self, telephony_plugin):
         ctx = PluginContext(

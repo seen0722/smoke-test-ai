@@ -60,8 +60,13 @@ class TelephonyPlugin(TestPlugin):
         body = self._render_body(params.get("body", "smoke-test"))
         timeout = params.get("timeout", 30)
         dut_number = ctx.settings.get("device", {}).get("phone_number", "")
+        if not dut_number:
+            return TestResult(id=tid, name=tname, status=TestStatus.SKIP,
+                              message="DUT phone number not configured (set device.phone_number in settings)")
 
         try:
+            # DUT starts listening (non-blocking)
+            ctx.snippet.asyncWaitForSms("sms_receive_cb")
             # Peer sends SMS to DUT
             ctx.peer_snippet.sendSms(dut_number, body)
             # DUT waits for receipt
@@ -92,7 +97,13 @@ class TelephonyPlugin(TestPlugin):
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"getDataNetworkType failed: {e}")
 
-        if re.search(expected_pattern, net_type_name):
+        try:
+            matched = re.search(expected_pattern, net_type_name)
+        except re.error as exc:
+            return TestResult(id=tid, name=tname, status=TestStatus.ERROR,
+                              message=f"Invalid expected_data_type regex '{expected_pattern}': {exc}")
+
+        if matched:
             return TestResult(id=tid, name=tname, status=TestStatus.PASS,
                               message=f"Network type: {net_type_name}")
         return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
