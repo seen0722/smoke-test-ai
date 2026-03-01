@@ -67,6 +67,7 @@ class TestCameraPlugin:
             ok,                                                     # KEYCODE_VOLUME_DOWN
             MagicMock(stdout="IMG_new.jpg\n", returncode=0),       # after ls path1
             MagicMock(stdout="1234567\n", returncode=0),           # stat size
+            ok,                                                     # finally: force-stop cleanup
         ]
         tc = {
             "id": "cam1", "name": "Camera", "type": "camera",
@@ -93,6 +94,7 @@ class TestCameraPlugin:
             MagicMock(stdout="IMG_old.jpg\n", returncode=0),       # after ls path1 (same)
             MagicMock(stdout="\n", returncode=0),                  # after ls path2 (same)
             MagicMock(stdout="\n", returncode=0),                  # after ls path3 (same)
+            ok,                                                     # finally: force-stop cleanup
         ]
         tc = {
             "id": "cam1", "name": "Camera", "type": "camera",
@@ -110,6 +112,51 @@ class TestCameraPlugin:
         result = camera_plugin.execute(tc, plugin_context)
         assert result.status == TestStatus.ERROR
 
+    def test_capture_front_skip_single_camera(self, camera_plugin, plugin_context):
+        """Front camera test should SKIP when device has only 1 camera."""
+        adb = plugin_context.adb
+        adb.shell.return_value = MagicMock(
+            stdout="Number of camera devices: 1\n", returncode=0,
+        )
+        tc = {
+            "id": "cam_f1", "name": "Front Camera", "type": "camera",
+            "action": "capture_photo",
+            "params": {"camera": "front", "wait_seconds": 0},
+        }
+        result = camera_plugin.execute(tc, plugin_context)
+        assert result.status == TestStatus.SKIP
+        assert "1 camera" in result.message
+        # Only 1 shell call (dumpsys), no force-stop since camera was never launched
+        adb.shell.assert_called_once()
+
+    def test_capture_front_pass_dual_camera(self, camera_plugin, plugin_context):
+        """Front camera test should proceed normally when device has 2 cameras."""
+        adb = plugin_context.adb
+        ok = MagicMock(stdout="", returncode=0)
+        adb.shell.side_effect = [
+            MagicMock(stdout="Number of camera devices: 2\n", returncode=0),  # dumpsys
+            ok,                                                     # mkdir -p
+            MagicMock(stdout="IMG_old.jpg\n", returncode=0),       # baseline ls path1
+            MagicMock(stdout="\n", returncode=0),                  # baseline ls path2
+            MagicMock(stdout="\n", returncode=0),                  # baseline ls path3
+            ok,                                                     # force-stop
+            MagicMock(stdout="Starting: Intent\n", returncode=0),  # am start (direct launcher)
+            ok,                                                     # ENTER (dismiss tutorial)
+            ok,                                                     # KEYCODE_VOLUME_DOWN
+            MagicMock(stdout="IMG_front.jpg\n", returncode=0),     # after ls path1
+            MagicMock(stdout="2048000\n", returncode=0),           # stat size
+            ok,                                                     # finally: force-stop cleanup
+        ]
+        tc = {
+            "id": "cam_f2", "name": "Front Camera", "type": "camera",
+            "action": "capture_photo",
+            "params": {"camera": "front", "wait_seconds": 0},
+        }
+        result = camera_plugin.execute(tc, plugin_context)
+        assert result.status == TestStatus.PASS
+        assert "IMG_front.jpg" in result.message
+        assert "front camera" in result.message
+
     def test_capture_and_verify_no_analyzer(self, camera_plugin, plugin_context):
         """capture_and_verify without visual_analyzer returns capture result."""
         adb = plugin_context.adb
@@ -125,6 +172,7 @@ class TestCameraPlugin:
             ok,                                                     # KEYCODE_VOLUME_DOWN
             MagicMock(stdout="IMG_new.jpg\n", returncode=0),       # after ls path1
             MagicMock(stdout="5000\n", returncode=0),              # stat size
+            ok,                                                     # finally: force-stop cleanup
         ]
         tc = {
             "id": "cv1", "name": "Verify", "type": "camera",
@@ -152,6 +200,7 @@ class TestCameraPlugin:
             ok,                                                     # KEYCODE_VOLUME_DOWN
             MagicMock(stdout="IMG_new.jpg\n", returncode=0),       # after ls path1
             MagicMock(stdout="5000\n", returncode=0),              # stat size
+            ok,                                                     # finally: force-stop cleanup
         ]
         # Mock adb.pull to actually create the file
         import tempfile
@@ -194,6 +243,7 @@ class TestCameraPlugin:
             ok,                                                     # KEYCODE_VOLUME_DOWN
             MagicMock(stdout="IMG_new.jpg\n", returncode=0),       # after ls path1
             MagicMock(stdout="5000\n", returncode=0),              # stat size
+            ok,                                                     # finally: force-stop cleanup
         ]
 
         def fake_pull(remote, local):
