@@ -242,3 +242,76 @@ test_suite:
       requires:
         device_capability: "has_sim"
       depends_on: "sms_send"
+
+    # === 功能測試：撥打電話 ===
+    - id: "phone_call"
+      name: "撥打電話"
+      type: "telephony"
+      action: "make_call"
+      params:
+        to_number: "${PEER_PHONE_NUMBER}"
+        call_duration: 5
+      requires:
+        device_capability: "has_sim"
+      depends_on: "sim_status"
+
+    # === 功能測試：WiFi 掃描 ===
+    - id: "wifi_scan"
+      name: "WiFi 掃描"
+      type: "wifi"
+      action: "scan"
+      depends_on: "wifi_connected"
+
+    - id: "wifi_scan_ssid"
+      name: "WiFi 尋找指定 SSID"
+      type: "wifi"
+      action: "scan_for_ssid"
+      params:
+        expected_ssid: "${WIFI_SSID}"
+      depends_on: "wifi_scan"
+
+    # === 功能測試：BLE 掃描 ===
+    - id: "ble_scan"
+      name: "BLE 裝置掃描"
+      type: "bluetooth"
+      action: "ble_scan"
+      params:
+        scan_duration: 5
+      depends_on: "bluetooth_enabled"
+
+    # === 功能測試：音頻播放 ===
+    - id: "audio_playback"
+      name: "音頻播放"
+      type: "audio"
+      action: "play_and_check"
+      params:
+        play_duration: 2
+
+    # === 功能測試：網路下載 ===
+    - id: "download_wifi"
+      name: "HTTP 下載 (WiFi)"
+      type: "network"
+      action: "http_download"
+      params:
+        network_mode: "wifi"
+        url: "http://speedtest.ftp.otenet.gr/files/test1Mb.db"
+      depends_on: "wifi_connected"
+
+    - id: "download_mobile"
+      name: "HTTP 下載 (行動數據)"
+      type: "network"
+      action: "http_download"
+      params:
+        network_mode: "mobile"
+      requires:
+        device_capability: "has_sim"
+      depends_on: "sim_status"
+
+    - id: "tcp_connect"
+      name: "TCP 連通性"
+      type: "network"
+      action: "tcp_connect"
+      params:
+        host: "8.8.8.8"
+        port: 443
+      depends_on: "wifi_connected"

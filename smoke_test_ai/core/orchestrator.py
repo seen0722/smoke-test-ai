@@ -17,6 +17,10 @@ from smoke_test_ai.reporting.test_plan_reporter import TestPlanReporter
 from smoke_test_ai.utils.logger import get_logger
 from smoke_test_ai.plugins.camera import CameraPlugin
 from smoke_test_ai.plugins.telephony import TelephonyPlugin
+from smoke_test_ai.plugins.wifi import WifiPlugin
+from smoke_test_ai.plugins.bluetooth import BluetoothPlugin
+from smoke_test_ai.plugins.audio import AudioPlugin
+from smoke_test_ai.plugins.network import NetworkPlugin
 
 logger = get_logger(__name__)
 
@@ -78,7 +82,8 @@ class Orchestrator:
     def _has_snippet_tests(suite_config: dict) -> bool:
         """Check if any test in the suite requires Mobly snippet."""
         tests = suite_config.get("test_suite", {}).get("tests", [])
-        return any(t.get("type") == "telephony" for t in tests)
+        snippet_types = {"telephony", "wifi", "bluetooth", "audio", "network"}
+        return any(t.get("type") in snippet_types for t in tests)
 
     def _init_plugins(self, adb, analyzer, serial, suite_config):
         """Initialize plugins and optionally Mobly snippet connections."""
@@ -107,6 +112,10 @@ class Orchestrator:
         plugins = {
             "telephony": TelephonyPlugin(),
             "camera": CameraPlugin(),
+            "wifi": WifiPlugin(),
+            "bluetooth": BluetoothPlugin(),
+            "audio": AudioPlugin(),
+            "network": NetworkPlugin(),
         }
 
         return plugins, snippet, peer_snippet

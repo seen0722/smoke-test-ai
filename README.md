@@ -20,8 +20,12 @@ Host PC (Linux/Mac/Win)
 │   ├── Setup Wizard Agent (AOA2 HID + LLM Vision)
 │   ├── Test Runner (6 test types)
 │   │   └── Plugin System
-│   │       ├── TelephonyPlugin (SMS via Mobly Snippet)
-│   │       └── CameraPlugin (ADB intent + LLM Vision)
+│   │       ├── TelephonyPlugin (SMS/Call via Mobly Snippet)
+│   │       ├── CameraPlugin (ADB intent + LLM Vision)
+│   │       ├── WifiPlugin (WiFi scan via Mobly Snippet)
+│   │       ├── BluetoothPlugin (BLE scan via Mobly Snippet)
+│   │       ├── AudioPlugin (Audio playback via Mobly Snippet)
+│   │       └── NetworkPlugin (HTTP download + TCP connect)
 │   └── Reporter (CLI / JSON / HTML / Test Plan)
 │
 ├── USB Hub
@@ -140,8 +144,12 @@ smoke-test suites list
 
 | 類型 | 說明 | 判定方式 |
 |------|------|---------|
-| `telephony` | SMS 簡訊收發、網路信號 | Mobly Snippet RPC 呼叫結果 |
+| `telephony` | SMS 簡訊收發、網路信號、撥打電話 | Mobly Snippet RPC 呼叫結果 |
 | `camera` | 相機拍照、照片品質驗證 | DCIM 新檔案偵測 + 可選 LLM 驗證 |
+| `wifi` | WiFi 掃描、SSID 搜尋 | Mobly Snippet WiFi API |
+| `bluetooth` | BLE 裝置掃描 | Mobly Snippet BLE API |
+| `audio` | 音頻播放驗證 | Mobly Snippet Media API |
+| `network` | HTTP 下載、TCP 連通性 | ADB curl + Mobly Snippet |
 
 ### Plugin 架構
 
@@ -152,21 +160,40 @@ smoke_test_ai/plugins/
 ├── __init__.py          # TestPlugin, PluginContext exports
 ├── base.py              # TestPlugin ABC + PluginContext dataclass
 ├── camera.py            # CameraPlugin — ADB intent 拍照 + LLM 驗證
-└── telephony.py         # TelephonyPlugin — SMS 收發 (Mobly Snippet)
+├── telephony.py         # TelephonyPlugin — SMS 收發 + 撥打電話 (Mobly Snippet)
+├── wifi.py              # WifiPlugin — WiFi 掃描 (Mobly Snippet)
+├── bluetooth.py         # BluetoothPlugin — BLE 裝置掃描 (Mobly Snippet)
+├── audio.py             # AudioPlugin — 音頻播放驗證 (Mobly Snippet)
+└── network.py           # NetworkPlugin — HTTP 下載 + TCP 連通性
 ```
 
 **TelephonyPlugin** 使用 Google Mobly Bundled Snippets，透過 JSON-RPC 呼叫 Android API：
 - `send_sms` — DUT 發送簡訊，確認發送成功
 - `receive_sms` — Peer 裝置發送簡訊給 DUT，DUT 確認收到（雙機模式）
 - `check_signal` — 查詢行動網路類型（LTE/NR/etc）
+- `make_call` — 撥打電話，確認通話狀態為 OFFHOOK
 
 **CameraPlugin** 使用 ADB shell intent，不需 Snippet：
 - `capture_photo` — 啟動相機 → 觸發快門 → 檢查 DCIM 新檔案
 - `capture_and_verify` — 拍照後 pull 照片，用 LLM Vision 驗證品質
 
+**WifiPlugin** 使用 Mobly Snippet WiFi API：
+- `scan` — 掃描 WiFi AP 列表，確認找到至少一個網路
+- `scan_for_ssid` — 掃描後檢查特定 SSID 是否存在
+
+**BluetoothPlugin** 使用 Mobly Snippet BLE API：
+- `ble_scan` — BLE 裝置掃描，確認找到至少一個裝置
+
+**AudioPlugin** 使用 Mobly Snippet Media API：
+- `play_and_check` — 播放音頻檔案，確認 mediaIsPlaying() 回傳 true
+
+**NetworkPlugin** 使用 ADB curl + Mobly Snippet：
+- `http_download` — HTTP 下載測試，支援 WiFi/行動數據模式切換
+- `tcp_connect` — TCP 連通性測試
+
 新增 Plugin 只需：一個 Python 檔 + YAML 測試案例，無需修改 framework。
 
-## 內建測試套件 (smoke_basic — 33 項)
+## 內建測試套件 (smoke_basic — 41 項)
 
 | 類別 | 測試項目 |
 |------|---------|
@@ -182,6 +209,11 @@ smoke_test_ai/plugins/
 | USB/電池 | 電池狀態、充電連線 |
 | 相機功能 | 後鏡頭拍照、前鏡頭拍照、照片品質驗證 |
 | 簡訊功能 | 行動網路類型、SMS 發送、SMS 接收 |
+| 電話功能 | 撥打電話 |
+| WiFi 功能 | WiFi 掃描、SSID 搜尋 |
+| BLE 功能 | BLE 裝置掃描 |
+| 音頻功能 | 音頻播放驗證 |
+| 網路功能 | HTTP 下載 (WiFi)、HTTP 下載 (行動數據)、TCP 連通性 |
 
 ### 自訂測試項目
 
@@ -257,7 +289,7 @@ user build 下 ADB 預設關閉，螢幕可能自動關閉導致測試失敗。�
 # 安裝開發依賴
 pip install -e ".[dev]"
 
-# 執行測試 (101 個單元測試，全 Mock，不需硬體)
+# 執行測試 (123 個單元測試，全 Mock，不需硬體)
 pytest tests/ -v
 
 # 執行單一模組測試
@@ -275,9 +307,9 @@ pytest tests/test_adb_controller.py -v
 | ADB | subprocess + adb CLI |
 | 設定檔 | PyYAML |
 | CLI | Click + Rich |
-| 功能測試 | Google Mobly Bundled Snippets (SMS/Telephony) |
+| 功能測試 | Google Mobly Bundled Snippets (Telephony/WiFi/BLE/Audio/Network) |
 | 報告 | Jinja2 (HTML + Test Plan) + JSON |
-| 測試 | pytest + pytest-mock (101 tests) |
+| 測試 | pytest + pytest-mock (123 tests) |
 
 ## License
 

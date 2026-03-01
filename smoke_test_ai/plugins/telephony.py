@@ -23,6 +23,8 @@ class TelephonyPlugin(TestPlugin):
             return self._receive_sms(test_case, context)
         if action == "check_signal":
             return self._check_signal(test_case, context)
+        if action == "make_call":
+            return self._make_call(test_case, context)
         return TestResult(
             id=test_case["id"], name=test_case["name"],
             status=TestStatus.ERROR,
@@ -108,6 +110,38 @@ class TelephonyPlugin(TestPlugin):
                               message=f"Network type: {net_type_name}")
         return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                           message=f"Network type {net_type_name} does not match /{expected_pattern}/")
+
+    def _make_call(self, tc: dict, ctx: PluginContext) -> TestResult:
+        tid, tname = tc["id"], tc["name"]
+        if not ctx.snippet:
+            return TestResult(id=tid, name=tname, status=TestStatus.SKIP,
+                              message="Snippet not available on DUT")
+        params = tc.get("params", {})
+        to_number = params.get("to_number", "")
+        if not to_number:
+            return TestResult(id=tid, name=tname, status=TestStatus.SKIP,
+                              message="to_number not configured")
+        call_duration = params.get("call_duration", 5)
+
+        try:
+            ctx.snippet.telephonyStartCall(to_number)
+            time.sleep(call_duration)
+            call_state = ctx.snippet.telephonyGetCallState()
+        except Exception as e:
+            return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                              message=f"make_call failed: {e}")
+        finally:
+            try:
+                ctx.snippet.telephonyEndCall()
+            except Exception:
+                pass
+
+        # CALL_STATE_OFFHOOK = 2, CALL_STATE_IDLE = 0
+        if call_state == 2:
+            return TestResult(id=tid, name=tname, status=TestStatus.PASS,
+                              message=f"Call to {to_number} active (state=OFFHOOK)")
+        return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                          message=f"Call state={call_state}, expected OFFHOOK(2)")
 
     @staticmethod
     def _render_body(template: str) -> str:

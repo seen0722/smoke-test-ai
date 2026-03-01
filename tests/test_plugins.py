@@ -1,9 +1,13 @@
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from smoke_test_ai.plugins.base import TestPlugin, PluginContext
 from smoke_test_ai.core.test_runner import TestResult, TestStatus
 from smoke_test_ai.plugins.camera import CameraPlugin
 from smoke_test_ai.plugins.telephony import TelephonyPlugin
+from smoke_test_ai.plugins.wifi import WifiPlugin
+from smoke_test_ai.plugins.bluetooth import BluetoothPlugin
+from smoke_test_ai.plugins.audio import AudioPlugin
+from smoke_test_ai.plugins.network import NetworkPlugin
 
 
 class DummyPlugin(TestPlugin):
@@ -288,3 +292,373 @@ class TestTelephonyPlugin:
         }
         result = telephony_plugin.execute(tc, plugin_context)
         assert result.status == TestStatus.ERROR
+
+    def test_make_call_pass(self, telephony_plugin):
+        snippet = MagicMock()
+        snippet.telephonyGetCallState.return_value = 2  # OFFHOOK
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "call1", "name": "Call", "type": "telephony",
+            "action": "make_call",
+            "params": {"to_number": "+886900000000", "call_duration": 0},
+        }
+        with patch("smoke_test_ai.plugins.telephony.time.sleep"):
+            result = telephony_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        snippet.telephonyStartCall.assert_called_once_with("+886900000000")
+        snippet.telephonyEndCall.assert_called_once()
+
+    def test_make_call_no_snippet(self, telephony_plugin, plugin_context):
+        tc = {
+            "id": "call1", "name": "Call", "type": "telephony",
+            "action": "make_call",
+            "params": {"to_number": "+886900000000"},
+        }
+        result = telephony_plugin.execute(tc, plugin_context)
+        assert result.status == TestStatus.SKIP
+
+    def test_make_call_no_number(self, telephony_plugin):
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=MagicMock(),
+        )
+        tc = {
+            "id": "call1", "name": "Call", "type": "telephony",
+            "action": "make_call",
+            "params": {},
+        }
+        result = telephony_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.SKIP
+        assert "to_number" in result.message
+
+    def test_make_call_cleanup_on_error(self, telephony_plugin):
+        snippet = MagicMock()
+        snippet.telephonyGetCallState.side_effect = RuntimeError("fail")
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "call1", "name": "Call", "type": "telephony",
+            "action": "make_call",
+            "params": {"to_number": "+886900000000", "call_duration": 0},
+        }
+        with patch("smoke_test_ai.plugins.telephony.time.sleep"):
+            result = telephony_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+        snippet.telephonyEndCall.assert_called_once()
+
+
+class TestWifiPlugin:
+    @pytest.fixture
+    def wifi_plugin(self):
+        return WifiPlugin()
+
+    def test_scan_pass(self, wifi_plugin):
+        snippet = MagicMock()
+        snippet.wifiGetScanResults.return_value = [
+            {"SSID": "TestAP", "BSSID": "aa:bb:cc:dd:ee:ff"},
+            {"SSID": "Office", "BSSID": "11:22:33:44:55:66"},
+        ]
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {"id": "w1", "name": "WiFi Scan", "type": "wifi", "action": "scan"}
+        result = wifi_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert "2" in result.message
+        snippet.wifiStartScan.assert_called_once()
+
+    def test_scan_no_snippet(self, wifi_plugin, plugin_context):
+        tc = {"id": "w1", "name": "WiFi Scan", "type": "wifi", "action": "scan"}
+        result = wifi_plugin.execute(tc, plugin_context)
+        assert result.status == TestStatus.SKIP
+
+    def test_scan_for_ssid_found(self, wifi_plugin):
+        snippet = MagicMock()
+        snippet.wifiGetScanResults.return_value = [
+            {"SSID": "TestAP", "BSSID": "aa:bb:cc:dd:ee:ff"},
+            {"SSID": "Target", "BSSID": "11:22:33:44:55:66"},
+        ]
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "w2", "name": "WiFi SSID", "type": "wifi",
+            "action": "scan_for_ssid",
+            "params": {"expected_ssid": "Target"},
+        }
+        result = wifi_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert "Target" in result.message
+
+    def test_scan_for_ssid_not_found(self, wifi_plugin):
+        snippet = MagicMock()
+        snippet.wifiGetScanResults.return_value = [
+            {"SSID": "OtherAP", "BSSID": "aa:bb:cc:dd:ee:ff"},
+        ]
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "w2", "name": "WiFi SSID", "type": "wifi",
+            "action": "scan_for_ssid",
+            "params": {"expected_ssid": "Target"},
+        }
+        result = wifi_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+        assert "Target" in result.message
+
+
+class TestBluetoothPlugin:
+    @pytest.fixture
+    def bt_plugin(self):
+        return BluetoothPlugin()
+
+    def test_ble_scan_pass(self, bt_plugin):
+        snippet = MagicMock()
+        snippet.bleGetScanResults.return_value = [
+            {"name": "Device1", "address": "AA:BB:CC:DD:EE:FF"},
+        ]
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "bt1", "name": "BLE Scan", "type": "bluetooth",
+            "action": "ble_scan",
+            "params": {"scan_duration": 0},
+        }
+        with patch("smoke_test_ai.plugins.bluetooth.time.sleep"):
+            result = bt_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        snippet.bleStartScan.assert_called_once()
+        snippet.bleStopScan.assert_called_once()
+
+    def test_ble_scan_no_devices(self, bt_plugin):
+        snippet = MagicMock()
+        snippet.bleGetScanResults.return_value = []
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "bt1", "name": "BLE Scan", "type": "bluetooth",
+            "action": "ble_scan",
+            "params": {"scan_duration": 0},
+        }
+        with patch("smoke_test_ai.plugins.bluetooth.time.sleep"):
+            result = bt_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+        snippet.bleStopScan.assert_called_once()
+
+    def test_ble_scan_no_snippet(self, bt_plugin, plugin_context):
+        tc = {
+            "id": "bt1", "name": "BLE Scan", "type": "bluetooth",
+            "action": "ble_scan", "params": {},
+        }
+        result = bt_plugin.execute(tc, plugin_context)
+        assert result.status == TestStatus.SKIP
+
+    def test_ble_scan_cleanup_on_error(self, bt_plugin):
+        snippet = MagicMock()
+        snippet.bleGetScanResults.side_effect = RuntimeError("scan error")
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "bt1", "name": "BLE Scan", "type": "bluetooth",
+            "action": "ble_scan",
+            "params": {"scan_duration": 0},
+        }
+        with patch("smoke_test_ai.plugins.bluetooth.time.sleep"):
+            result = bt_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+        snippet.bleStopScan.assert_called_once()
+
+
+class TestAudioPlugin:
+    @pytest.fixture
+    def audio_plugin(self):
+        return AudioPlugin()
+
+    def test_play_and_check_pass(self, audio_plugin):
+        snippet = MagicMock()
+        snippet.mediaIsPlaying.return_value = True
+        adb = MagicMock()
+        ctx = PluginContext(
+            adb=adb, settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "a1", "name": "Audio", "type": "audio",
+            "action": "play_and_check",
+            "params": {"play_duration": 0},
+        }
+        with patch("smoke_test_ai.plugins.audio.time.sleep"):
+            result = audio_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        snippet.mediaPlayAudioFile.assert_called_once()
+        snippet.mediaStop.assert_called_once()
+
+    def test_play_and_check_not_playing(self, audio_plugin):
+        snippet = MagicMock()
+        snippet.mediaIsPlaying.return_value = False
+        adb = MagicMock()
+        ctx = PluginContext(
+            adb=adb, settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "a1", "name": "Audio", "type": "audio",
+            "action": "play_and_check",
+            "params": {"play_duration": 0},
+        }
+        with patch("smoke_test_ai.plugins.audio.time.sleep"):
+            result = audio_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+        assert "not playing" in result.message.lower()
+
+    def test_play_and_check_no_snippet(self, audio_plugin, plugin_context):
+        tc = {
+            "id": "a1", "name": "Audio", "type": "audio",
+            "action": "play_and_check", "params": {},
+        }
+        result = audio_plugin.execute(tc, plugin_context)
+        assert result.status == TestStatus.SKIP
+
+    def test_play_and_check_cleanup(self, audio_plugin):
+        snippet = MagicMock()
+        snippet.mediaIsPlaying.side_effect = RuntimeError("fail")
+        adb = MagicMock()
+        ctx = PluginContext(
+            adb=adb, settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "a1", "name": "Audio", "type": "audio",
+            "action": "play_and_check",
+            "params": {"play_duration": 0},
+        }
+        with patch("smoke_test_ai.plugins.audio.time.sleep"):
+            result = audio_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+        snippet.mediaStop.assert_called_once()
+        adb.shell.assert_any_call("rm -f /sdcard/smoke_test_audio.ogg")
+
+
+class TestNetworkPlugin:
+    @pytest.fixture
+    def net_plugin(self):
+        return NetworkPlugin()
+
+    def test_http_download_pass(self, net_plugin):
+        adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout="200 512000.000\n")
+        ctx = PluginContext(
+            adb=adb, settings={}, device_capabilities={},
+        )
+        tc = {
+            "id": "n1", "name": "Download", "type": "network",
+            "action": "http_download",
+            "params": {"network_mode": "wifi"},
+        }
+        result = net_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert "512000" in result.message
+
+    def test_http_download_fail_status(self, net_plugin):
+        adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout="404 0.000\n")
+        ctx = PluginContext(
+            adb=adb, settings={}, device_capabilities={},
+        )
+        tc = {
+            "id": "n1", "name": "Download", "type": "network",
+            "action": "http_download",
+            "params": {"network_mode": "auto"},
+        }
+        result = net_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+        assert "404" in result.message
+
+    def test_http_download_mobile_mode(self, net_plugin):
+        adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout="200 100000.000\n")
+        ctx = PluginContext(
+            adb=adb, settings={}, device_capabilities={},
+        )
+        tc = {
+            "id": "n1", "name": "Download", "type": "network",
+            "action": "http_download",
+            "params": {"network_mode": "mobile"},
+        }
+        with patch("smoke_test_ai.plugins.network.time.sleep"):
+            result = net_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        # Verify wifi disable/enable were called
+        calls = [str(c) for c in adb.shell.call_args_list]
+        assert any("svc wifi disable" in c for c in calls)
+        assert any("svc wifi enable" in c for c in calls)
+
+    def test_http_download_wifi_restore_on_error(self, net_plugin):
+        adb = MagicMock()
+        # First call is wifi disable, second call (curl) raises
+        call_count = 0
+
+        def shell_side_effect(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:  # svc wifi disable
+                return MagicMock(stdout="")
+            if call_count == 2:  # curl
+                raise RuntimeError("connection refused")
+            return MagicMock(stdout="")  # svc wifi enable
+
+        adb.shell.side_effect = shell_side_effect
+        ctx = PluginContext(
+            adb=adb, settings={}, device_capabilities={},
+        )
+        tc = {
+            "id": "n1", "name": "Download", "type": "network",
+            "action": "http_download",
+            "params": {"network_mode": "mobile"},
+        }
+        with patch("smoke_test_ai.plugins.network.time.sleep"):
+            result = net_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+        # Verify wifi was re-enabled despite error
+        calls = [str(c) for c in adb.shell.call_args_list]
+        assert any("svc wifi enable" in c for c in calls)
+
+    def test_tcp_connect_pass(self, net_plugin):
+        snippet = MagicMock()
+        snippet.networkIsTcpConnectable.return_value = True
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "n2", "name": "TCP", "type": "network",
+            "action": "tcp_connect",
+            "params": {"host": "8.8.8.8", "port": 443},
+        }
+        result = net_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        snippet.networkIsTcpConnectable.assert_called_once_with("8.8.8.8", 443)
+
+    def test_tcp_connect_no_snippet(self, net_plugin, plugin_context):
+        tc = {
+            "id": "n2", "name": "TCP", "type": "network",
+            "action": "tcp_connect",
+            "params": {"host": "8.8.8.8", "port": 443},
+        }
+        result = net_plugin.execute(tc, plugin_context)
+        assert result.status == TestStatus.SKIP

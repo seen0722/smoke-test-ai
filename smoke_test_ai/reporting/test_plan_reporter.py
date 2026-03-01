@@ -78,7 +78,41 @@ class TestPlanReporter:
                 return f"SMS received within {params.get('timeout', 30)}s"
             if action == "check_signal":
                 return f"Network type matches /{params.get('expected_data_type', '.*')}/"
+            if action == "make_call":
+                return f"Call to {params.get('to_number', 'peer')} reaches OFFHOOK state"
             return f"Telephony action: {action}"
+
+        if t == "wifi":
+            action = tc.get("action", "")
+            params = tc.get("params", {})
+            if action == "scan":
+                return "WiFi scan finds at least 1 network"
+            if action == "scan_for_ssid":
+                return f"WiFi scan finds SSID \"{params.get('expected_ssid', '')}\""
+            return f"WiFi action: {action}"
+
+        if t == "bluetooth":
+            action = tc.get("action", "")
+            params = tc.get("params", {})
+            if action == "ble_scan":
+                return f"BLE scan finds at least 1 device (scan {params.get('scan_duration', 5)}s)"
+            return f"Bluetooth action: {action}"
+
+        if t == "audio":
+            action = tc.get("action", "")
+            if action == "play_and_check":
+                return "Audio plays and mediaIsPlaying() returns true"
+            return f"Audio action: {action}"
+
+        if t == "network":
+            action = tc.get("action", "")
+            params = tc.get("params", {})
+            if action == "http_download":
+                mode = params.get("network_mode", "auto")
+                return f"HTTP download returns 200 OK (mode: {mode})"
+            if action == "tcp_connect":
+                return f"TCP connection to {params.get('host', '8.8.8.8')}:{params.get('port', 443)} succeeds"
+            return f"Network action: {action}"
 
         if t == "camera":
             action = tc.get("action", "")
