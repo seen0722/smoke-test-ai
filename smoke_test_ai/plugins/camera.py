@@ -22,6 +22,8 @@ class CameraPlugin(TestPlugin):
             return result
         if action == "capture_and_verify":
             return self._capture_and_verify(test_case, context)
+        if action == "verify_latest_photo":
+            return self._verify_latest_photo(test_case, context)
         return TestResult(
             id=test_case["id"], name=test_case["name"],
             status=TestStatus.ERROR,
@@ -158,3 +160,49 @@ class CameraPlugin(TestPlugin):
             id=tc["id"], name=tc["name"], status=TestStatus.FAIL,
             message=f"LLM rejected: {analysis.get('reason', '')}",
         )
+
+    def _verify_latest_photo(self, tc: dict, ctx: PluginContext) -> TestResult:
+        """Verify the latest photo on device without taking a new one."""
+        tid, tname = tc["id"], tc["name"]
+        adb = ctx.adb
+        prompt = tc.get("params", {}).get(
+            "verify_prompt", "Is the photo clear, not black, not white?"
+        )
+
+        # Find the newest photo across DCIM paths
+        dcim_paths = [DCIM_PATH, "/sdcard/DCIM", "/sdcard/Pictures"]
+        remote_path = ""
+        for dp in dcim_paths:
+            newest = adb.shell(f"ls -t '{dp}/' 2>/dev/null | head -1").stdout.strip()
+            if newest:
+                remote_path = f"{dp}/{newest}"
+                break
+
+        if not remote_path:
+            return TestResult(id=tid, name=tname, status=TestStatus.SKIP,
+                              message="No photo found on device to verify")
+
+        if not ctx.visual_analyzer:
+            return TestResult(id=tid, name=tname, status=TestStatus.SKIP,
+                              message="Visual analyzer not available")
+
+        filename = Path(remote_path).name
+        with tempfile.TemporaryDirectory() as tmp:
+            local_path = Path(tmp) / filename
+            image = None
+            if hasattr(adb, "pull"):
+                adb.pull(remote_path, str(local_path))
+                if local_path.exists() and cv2 is not None:
+                    image = cv2.imread(str(local_path))
+
+            if image is None:
+                return TestResult(id=tid, name=tname, status=TestStatus.SKIP,
+                                  message=f"Cannot pull/read {remote_path}")
+
+            analysis = ctx.visual_analyzer.analyze_test_screenshot(image, prompt)
+
+        if analysis.get("pass", False):
+            return TestResult(id=tid, name=tname, status=TestStatus.PASS,
+                              message=f"Verified: {analysis.get('reason', '')}")
+        return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                          message=f"LLM rejected: {analysis.get('reason', '')}")

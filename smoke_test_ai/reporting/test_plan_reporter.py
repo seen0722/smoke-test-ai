@@ -156,6 +156,8 @@ class TestPlanReporter:
                 return f"New photo file created in DCIM ({params.get('camera', 'back')} camera)"
             if action == "capture_and_verify":
                 return f"Photo captured and LLM verified: {params.get('verify_prompt', '')}"
+            if action == "verify_latest_photo":
+                return f"Verify latest photo with LLM: {params.get('verify_prompt', '')}"
             return f"Camera action: {action}"
 
         return "Unknown test type"

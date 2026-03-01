@@ -267,6 +267,29 @@ class TestCameraPlugin:
         assert result.status == TestStatus.FAIL
         assert "LLM rejected" in result.message
 
+    def test_verify_latest_photo_no_analyzer(self, camera_plugin):
+        """verify_latest_photo without visual_analyzer returns SKIP."""
+        adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout="IMG_20260301.jpg")
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={})
+        tc = {"id": "c5", "name": "Verify", "type": "camera",
+              "action": "verify_latest_photo",
+              "params": {"verify_prompt": "Is it clear?"}}
+        result = camera_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.SKIP
+        assert "Visual analyzer" in result.message
+
+    def test_verify_latest_photo_no_photo(self, camera_plugin):
+        """verify_latest_photo with no photo on device returns SKIP."""
+        adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout="")
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={})
+        tc = {"id": "c6", "name": "Verify", "type": "camera",
+              "action": "verify_latest_photo"}
+        result = camera_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.SKIP
+        assert "No photo" in result.message
+
 
 class TestTelephonyPlugin:
     @pytest.fixture

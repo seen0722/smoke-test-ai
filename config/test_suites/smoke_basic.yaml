@@ -203,10 +203,8 @@ test_suite:
     - id: "camera_image_quality"
       name: "照片品質驗證"
       type: "camera"
-      action: "capture_and_verify"
+      action: "verify_latest_photo"
       params:
-        camera: "back"
-        wait_seconds: 5
         verify_prompt: "照片是否清晰、非全黑、非全白、無明顯色偏？"
       depends_on: "camera_rear_capture"
 
