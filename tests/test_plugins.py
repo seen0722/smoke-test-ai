@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 from smoke_test_ai.plugins.base import TestPlugin, PluginContext
 from smoke_test_ai.core.test_runner import TestResult, TestStatus
 from smoke_test_ai.plugins.camera import CameraPlugin
+from smoke_test_ai.plugins.telephony import TelephonyPlugin
 
 
 class DummyPlugin(TestPlugin):
@@ -179,3 +180,96 @@ class TestCameraPlugin:
             result = camera_plugin.execute(tc, ctx)
         assert result.status == TestStatus.FAIL
         assert "LLM rejected" in result.message
+
+
+class TestTelephonyPlugin:
+    @pytest.fixture
+    def telephony_plugin(self):
+        return TelephonyPlugin()
+
+    def test_send_sms_pass(self, telephony_plugin):
+        snippet = MagicMock()
+        snippet.sendSms.return_value = None  # no error = success
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "sms1", "name": "SMS Send", "type": "telephony",
+            "action": "send_sms",
+            "params": {"to_number": "+886900000000", "body": "test msg"},
+        }
+        result = telephony_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        snippet.sendSms.assert_called_once_with("+886900000000", "test msg")
+
+    def test_send_sms_no_snippet(self, telephony_plugin, plugin_context):
+        tc = {
+            "id": "sms1", "name": "SMS Send", "type": "telephony",
+            "action": "send_sms",
+            "params": {"to_number": "+886900000000", "body": "test"},
+        }
+        result = telephony_plugin.execute(tc, plugin_context)
+        assert result.status == TestStatus.SKIP
+        assert "snippet" in result.message.lower()
+
+    def test_receive_sms_pass(self, telephony_plugin):
+        dut_snippet = MagicMock()
+        dut_snippet.waitForSms.return_value = {
+            "OriginatingAddress": "+886900000000",
+            "MessageBody": "smoke-test-inbound-123",
+        }
+        peer_snippet = MagicMock()
+        ctx = PluginContext(
+            adb=MagicMock(), settings={},
+            device_capabilities={},
+            snippet=dut_snippet, peer_snippet=peer_snippet,
+        )
+        ctx.adb.serial = "DUT_SERIAL"
+        ctx.settings = {"device": {"phone_number": "+886912345678"}}
+        tc = {
+            "id": "sms2", "name": "SMS Receive", "type": "telephony",
+            "action": "receive_sms",
+            "params": {"body": "smoke-test-inbound", "timeout": 10},
+        }
+        result = telephony_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        peer_snippet.sendSms.assert_called_once()
+        dut_snippet.waitForSms.assert_called_once_with(10000)
+
+    def test_receive_sms_no_peer(self, telephony_plugin):
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=MagicMock(), peer_snippet=None,
+        )
+        tc = {
+            "id": "sms2", "name": "SMS Receive", "type": "telephony",
+            "action": "receive_sms",
+            "params": {"body": "test", "timeout": 10},
+        }
+        result = telephony_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.SKIP
+        assert "peer" in result.message.lower()
+
+    def test_check_signal_pass(self, telephony_plugin):
+        snippet = MagicMock()
+        snippet.getDataNetworkType.return_value = 13  # LTE
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "sig1", "name": "Signal", "type": "telephony",
+            "action": "check_signal",
+            "params": {"expected_data_type": "LTE|NR"},
+        }
+        result = telephony_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+
+    def test_unknown_action_errors(self, telephony_plugin, plugin_context):
+        tc = {
+            "id": "t1", "name": "Bad", "type": "telephony",
+            "action": "bad_action", "params": {},
+        }
+        result = telephony_plugin.execute(tc, plugin_context)
+        assert result.status == TestStatus.ERROR
