@@ -377,9 +377,10 @@ class TestTelephonyPlugin:
 
     def test_make_call_pass(self, telephony_plugin):
         snippet = MagicMock()
-        snippet.telephonyGetCallState.return_value = 2  # OFFHOOK
+        snippet.getTelephonyCallState.return_value = 2  # OFFHOOK
+        adb = MagicMock()
         ctx = PluginContext(
-            adb=MagicMock(), settings={}, device_capabilities={},
+            adb=adb, settings={}, device_capabilities={},
             snippet=snippet,
         )
         tc = {
@@ -390,8 +391,11 @@ class TestTelephonyPlugin:
         with patch("smoke_test_ai.plugins.telephony.time.sleep"):
             result = telephony_plugin.execute(tc, ctx)
         assert result.status == TestStatus.PASS
-        snippet.telephonyStartCall.assert_called_once_with("+886900000000")
-        snippet.telephonyEndCall.assert_called_once()
+        # Dial via ADB intent, not snippet
+        calls = [str(c) for c in adb.shell.call_args_list]
+        assert any("android.intent.action.CALL" in c and "+886900000000" in c for c in calls)
+        # Hang up via ADB keyevent
+        assert any("KEYCODE_ENDCALL" in c for c in calls)
 
     def test_make_call_no_snippet(self, telephony_plugin, plugin_context):
         tc = {
@@ -418,9 +422,10 @@ class TestTelephonyPlugin:
 
     def test_make_call_cleanup_on_error(self, telephony_plugin):
         snippet = MagicMock()
-        snippet.telephonyGetCallState.side_effect = RuntimeError("fail")
+        snippet.getTelephonyCallState.side_effect = RuntimeError("fail")
+        adb = MagicMock()
         ctx = PluginContext(
-            adb=MagicMock(), settings={}, device_capabilities={},
+            adb=adb, settings={}, device_capabilities={},
             snippet=snippet,
         )
         tc = {
@@ -431,7 +436,9 @@ class TestTelephonyPlugin:
         with patch("smoke_test_ai.plugins.telephony.time.sleep"):
             result = telephony_plugin.execute(tc, ctx)
         assert result.status == TestStatus.FAIL
-        snippet.telephonyEndCall.assert_called_once()
+        # Hang up via ADB even on error
+        calls = [str(c) for c in adb.shell.call_args_list]
+        assert any("KEYCODE_ENDCALL" in c for c in calls)
 
 
 class TestWifiPlugin:

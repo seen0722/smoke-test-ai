@@ -124,15 +124,18 @@ class TelephonyPlugin(TestPlugin):
         call_duration = params.get("call_duration", 5)
 
         try:
-            ctx.snippet.telephonyStartCall(to_number)
+            # Dial via ADB intent (telephonyStartCall does not exist in Mobly)
+            ctx.adb.shell(
+                f"am start -a android.intent.action.CALL -d tel:{to_number}"
+            )
             time.sleep(call_duration)
-            call_state = ctx.snippet.telephonyGetCallState()
+            call_state = ctx.snippet.getTelephonyCallState()
         except Exception as e:
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"make_call failed: {e}")
         finally:
             try:
-                ctx.snippet.telephonyEndCall()
+                ctx.adb.shell("input keyevent KEYCODE_ENDCALL")
             except Exception:
                 pass
 
