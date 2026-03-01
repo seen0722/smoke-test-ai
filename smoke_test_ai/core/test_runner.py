@@ -30,12 +30,13 @@ class TestResult:
         return {"id": self.id, "name": self.name, "status": self.status.value, "message": self.message, "duration": self.duration, "screenshot_path": self.screenshot_path}
 
 class TestRunner:
-    def __init__(self, adb: AdbController, visual_analyzer=None, screen_capture=None, webcam_capture=None, device_capabilities: dict | None = None):
+    def __init__(self, adb: AdbController, visual_analyzer=None, screen_capture=None, webcam_capture=None, device_capabilities: dict | None = None, plugins: dict | None = None):
         self.adb = adb
         self.visual_analyzer = visual_analyzer
         self.screen_capture = screen_capture
         self.webcam_capture = webcam_capture
         self.device_capabilities = device_capabilities or {}
+        self._plugins = plugins or {}
 
     def run_suite(self, suite_config: dict) -> list[TestResult]:
         suite = suite_config["test_suite"]
@@ -86,6 +87,14 @@ class TestRunner:
                     result = self._run_screenshot_llm(test_case)
                 elif test_type == "apk_instrumentation":
                     result = self._run_apk_instrumentation(test_case)
+                elif test_type in self._plugins:
+                    from smoke_test_ai.plugins.base import PluginContext
+                    ctx = PluginContext(
+                        adb=self.adb,
+                        settings={},
+                        device_capabilities=self.device_capabilities,
+                    )
+                    result = self._plugins[test_type].execute(test_case, ctx)
                 else:
                     result = TestResult(id=test_id, name=test_name, status=TestStatus.ERROR, message=f"Unknown test type: {test_type}")
             except Exception as e:

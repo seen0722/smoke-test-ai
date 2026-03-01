@@ -165,3 +165,64 @@ class TestTestRunner:
         results = runner.run_suite(suite)
         assert results[0].status == TestStatus.PASS
         assert results[1].status == TestStatus.PASS
+
+
+class TestPluginDispatch:
+    def test_plugin_type_dispatched(self, mock_adb):
+        from smoke_test_ai.plugins.base import TestPlugin, PluginContext
+
+        class FakePlugin(TestPlugin):
+            def execute(self, test_case, context):
+                return TestResult(
+                    id=test_case["id"], name=test_case["name"],
+                    status=TestStatus.PASS, message="from plugin",
+                )
+
+        runner = TestRunner(adb=mock_adb, plugins={"custom": FakePlugin()})
+        tc = {"id": "c1", "name": "Custom", "type": "custom"}
+        result = runner.run_test(tc)
+        assert result.status == TestStatus.PASS
+        assert result.message == "from plugin"
+
+    def test_plugin_receives_context(self, mock_adb):
+        from smoke_test_ai.plugins.base import TestPlugin, PluginContext
+
+        received = {}
+
+        class SpyPlugin(TestPlugin):
+            def execute(self, test_case, context):
+                received["adb"] = context.adb
+                received["caps"] = context.device_capabilities
+                return TestResult(
+                    id=test_case["id"], name=test_case["name"],
+                    status=TestStatus.PASS,
+                )
+
+        runner = TestRunner(
+            adb=mock_adb,
+            device_capabilities={"has_sim": True},
+            plugins={"spy": SpyPlugin()},
+        )
+        tc = {"id": "s1", "name": "Spy", "type": "spy"}
+        runner.run_test(tc)
+        assert received["adb"] is mock_adb
+        assert received["caps"] == {"has_sim": True}
+
+    def test_unknown_type_still_errors(self, mock_adb):
+        runner = TestRunner(adb=mock_adb, plugins={})
+        tc = {"id": "bad", "name": "Bad", "type": "nonexistent"}
+        result = runner.run_test(tc)
+        assert result.status == TestStatus.ERROR
+
+    def test_plugin_exception_caught(self, mock_adb):
+        from smoke_test_ai.plugins.base import TestPlugin, PluginContext
+
+        class BrokenPlugin(TestPlugin):
+            def execute(self, test_case, context):
+                raise RuntimeError("boom")
+
+        runner = TestRunner(adb=mock_adb, plugins={"broken": BrokenPlugin()})
+        tc = {"id": "b1", "name": "Broken", "type": "broken"}
+        result = runner.run_test(tc)
+        assert result.status == TestStatus.ERROR
+        assert "boom" in result.message
