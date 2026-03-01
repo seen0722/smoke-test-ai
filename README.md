@@ -303,7 +303,7 @@ user build 下 ADB 預設關閉，螢幕可能自動關閉導致測試失敗。�
 # 安裝開發依賴
 pip install -e ".[dev]"
 
-# 執行測試 (125 個單元測試，全 Mock，不需硬體)
+# 執行測試 (126 個單元測試，全 Mock，不需硬體)
 pytest tests/ -v
 
 # 執行單一模組測試
@@ -323,7 +323,7 @@ pytest tests/test_adb_controller.py -v
 | CLI | Click + Rich |
 | 功能測試 | Google Mobly Bundled Snippets (Telephony/WiFi/BLE/Audio/Network) |
 | 報告 | Jinja2 (HTML + Test Plan) + JSON |
-| 測試 | pytest + pytest-mock (125 tests) |
+| 測試 | pytest + pytest-mock (126 tests) |
 
 ## License
 
