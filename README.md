@@ -174,8 +174,9 @@ smoke_test_ai/plugins/
 - `make_call` — 撥打電話，確認通話狀態為 OFFHOOK
 
 **CameraPlugin** 使用 ADB 直接啟動相機，不需 Snippet：
-- `capture_photo` — 啟動相機（CameraLauncher 直接模式）→ VOLUME_DOWN 觸發快門 → 多路徑搜尋 DCIM 新檔案
+- `capture_photo` — 啟動相機（CameraLauncher 直接模式）→ VOLUME_DOWN 觸發快門 → 多路徑搜尋 DCIM 新檔案（前鏡頭測試會先查詢鏡頭數量，單鏡頭裝置自動 SKIP）
 - `capture_and_verify` — 拍照後 pull 照片，用 LLM Vision 驗證品質
+- 測試完畢後自動 force-stop 相機 app，避免影響後續測試
 
 **WifiPlugin** 使用 Mobly Snippet WiFi API：
 - `scan` — 掃描 WiFi AP 列表，確認找到至少一個網路
@@ -302,7 +303,7 @@ user build 下 ADB 預設關閉，螢幕可能自動關閉導致測試失敗。�
 # 安裝開發依賴
 pip install -e ".[dev]"
 
-# 執行測試 (123 個單元測試，全 Mock，不需硬體)
+# 執行測試 (125 個單元測試，全 Mock，不需硬體)
 pytest tests/ -v
 
 # 執行單一模組測試
@@ -322,7 +323,7 @@ pytest tests/test_adb_controller.py -v
 | CLI | Click + Rich |
 | 功能測試 | Google Mobly Bundled Snippets (Telephony/WiFi/BLE/Audio/Network) |
 | 報告 | Jinja2 (HTML + Test Plan) + JSON |
-| 測試 | pytest + pytest-mock (123 tests) |
+| 測試 | pytest + pytest-mock (125 tests) |
 
 ## License
 
