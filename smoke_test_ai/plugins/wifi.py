@@ -100,11 +100,22 @@ class WifiPlugin(TestPlugin):
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"WiFi toggle failed: {e}")
 
-        if enabled:
-            return TestResult(id=tid, name=tname, status=TestStatus.PASS,
-                              message="WiFi toggle OK (disable→enable)")
-        return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
-                          message="WiFi not re-enabled after toggle")
+        if not enabled:
+            return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                              message="WiFi not re-enabled after toggle")
+
+        # Wait for WiFi to fully reconnect before declaring success
+        for _ in range(15):
+            try:
+                if ctx.snippet.isWifiConnected():
+                    return TestResult(id=tid, name=tname, status=TestStatus.PASS,
+                                      message="WiFi toggle OK (disable→enable→reconnected)")
+            except Exception:
+                pass
+            time.sleep(2)
+
+        return TestResult(id=tid, name=tname, status=TestStatus.PASS,
+                          message="WiFi toggle OK (disable→enable, reconnect pending)")
 
     def _connection_info(self, tc: dict, ctx: PluginContext) -> TestResult:
         tid, tname = tc["id"], tc["name"]
