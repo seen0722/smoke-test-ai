@@ -64,6 +64,8 @@ class TestCameraPlugin:
         }
         result = camera_plugin.execute(tc, plugin_context)
         assert result.status == TestStatus.PASS
+        assert "IMG_20260301.jpg" in result.message
+        assert "1234567" in result.message
 
     def test_capture_photo_no_new_file(self, camera_plugin, plugin_context):
         adb = plugin_context.adb
@@ -88,3 +90,92 @@ class TestCameraPlugin:
         }
         result = camera_plugin.execute(tc, plugin_context)
         assert result.status == TestStatus.ERROR
+
+    def test_capture_and_verify_no_analyzer(self, camera_plugin, plugin_context):
+        """capture_and_verify without visual_analyzer returns capture result."""
+        adb = plugin_context.adb
+        adb.shell.side_effect = [
+            MagicMock(stdout="IMG_old.jpg\n", returncode=0),
+            MagicMock(stdout="", returncode=0),
+            MagicMock(stdout="", returncode=0),
+            MagicMock(stdout="IMG_new.jpg\n", returncode=0),
+            MagicMock(stdout="5000\n", returncode=0),
+        ]
+        tc = {
+            "id": "cv1", "name": "Verify", "type": "camera",
+            "action": "capture_and_verify",
+            "params": {"camera": "back", "wait_seconds": 0},
+        }
+        result = camera_plugin.execute(tc, plugin_context)
+        assert result.status == TestStatus.PASS
+        assert "IMG_new.jpg" in result.message
+
+    def test_capture_and_verify_llm_pass(self, camera_plugin):
+        """capture_and_verify with LLM returning pass."""
+        analyzer = MagicMock()
+        analyzer.analyze_test_screenshot.return_value = {"pass": True, "reason": "clear image"}
+        adb = MagicMock()
+        adb.shell.side_effect = [
+            MagicMock(stdout="IMG_old.jpg\n", returncode=0),
+            MagicMock(stdout="", returncode=0),
+            MagicMock(stdout="", returncode=0),
+            MagicMock(stdout="IMG_new.jpg\n", returncode=0),
+            MagicMock(stdout="5000\n", returncode=0),
+        ]
+        # Mock adb.pull to actually create the file
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        def fake_pull(remote, local):
+            Path(local).write_bytes(b"\xff\xd8fake-jpeg-data")
+
+        adb.pull = fake_pull
+        ctx = PluginContext(
+            adb=adb, settings={}, device_capabilities={},
+            visual_analyzer=analyzer,
+        )
+        tc = {
+            "id": "cv2", "name": "Verify LLM", "type": "camera",
+            "action": "capture_and_verify",
+            "params": {"camera": "back", "wait_seconds": 0, "verify_prompt": "Is it clear?"},
+        }
+        with patch("smoke_test_ai.plugins.camera.cv2") as mock_cv2:
+            mock_cv2.imread.return_value = MagicMock()  # fake image array
+            result = camera_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert "Verified" in result.message
+
+    def test_capture_and_verify_llm_fail(self, camera_plugin):
+        """capture_and_verify with LLM returning fail."""
+        analyzer = MagicMock()
+        analyzer.analyze_test_screenshot.return_value = {"pass": False, "reason": "all black"}
+        adb = MagicMock()
+        adb.shell.side_effect = [
+            MagicMock(stdout="IMG_old.jpg\n", returncode=0),
+            MagicMock(stdout="", returncode=0),
+            MagicMock(stdout="", returncode=0),
+            MagicMock(stdout="IMG_new.jpg\n", returncode=0),
+            MagicMock(stdout="5000\n", returncode=0),
+        ]
+
+        def fake_pull(remote, local):
+            from pathlib import Path
+            Path(local).write_bytes(b"\xff\xd8fake-jpeg-data")
+
+        adb.pull = fake_pull
+        ctx = PluginContext(
+            adb=adb, settings={}, device_capabilities={},
+            visual_analyzer=analyzer,
+        )
+        tc = {
+            "id": "cv3", "name": "Verify Fail", "type": "camera",
+            "action": "capture_and_verify",
+            "params": {"camera": "back", "wait_seconds": 0},
+        }
+        from unittest.mock import patch
+        with patch("smoke_test_ai.plugins.camera.cv2") as mock_cv2:
+            mock_cv2.imread.return_value = MagicMock()
+            result = camera_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+        assert "LLM rejected" in result.message
