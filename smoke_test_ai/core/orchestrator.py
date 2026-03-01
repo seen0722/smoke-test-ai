@@ -15,6 +15,8 @@ from smoke_test_ai.reporting.json_reporter import JsonReporter
 from smoke_test_ai.reporting.html_reporter import HtmlReporter
 from smoke_test_ai.reporting.test_plan_reporter import TestPlanReporter
 from smoke_test_ai.utils.logger import get_logger
+from smoke_test_ai.plugins.camera import CameraPlugin
+from smoke_test_ai.plugins.telephony import TelephonyPlugin
 
 logger = get_logger(__name__)
 
@@ -71,6 +73,43 @@ class Orchestrator:
             api_key=llm_cfg.get("api_key"),
             timeout=llm_cfg.get("timeout", 30),
         )
+
+    @staticmethod
+    def _has_snippet_tests(suite_config: dict) -> bool:
+        """Check if any test in the suite requires Mobly snippet."""
+        tests = suite_config.get("test_suite", {}).get("tests", [])
+        return any(t.get("type") == "telephony" for t in tests)
+
+    def _init_plugins(self, adb, analyzer, serial, suite_config):
+        """Initialize plugins and optionally Mobly snippet connections."""
+        snippet = None
+        peer_snippet = None
+
+        if self._has_snippet_tests(suite_config):
+            try:
+                from mobly.controllers.android_device import AndroidDevice
+                mobly_dut = AndroidDevice(serial or adb.serial)
+                mobly_dut.load_snippet('mbs', 'com.google.android.mobly.snippet.bundled')
+                snippet = mobly_dut.mbs
+                self._mobly_dut = mobly_dut
+                logger.info("Mobly snippet loaded on DUT")
+
+                peer_serial = self.device_config.get("peer_serial")
+                if peer_serial:
+                    mobly_peer = AndroidDevice(peer_serial)
+                    mobly_peer.load_snippet('mbs', 'com.google.android.mobly.snippet.bundled')
+                    peer_snippet = mobly_peer.mbs
+                    self._mobly_peer = mobly_peer
+                    logger.info(f"Mobly snippet loaded on peer ({peer_serial})")
+            except Exception as e:
+                logger.warning(f"Failed to load Mobly snippets: {e}")
+
+        plugins = {
+            "telephony": TelephonyPlugin(),
+            "camera": CameraPlugin(),
+        }
+
+        return plugins, snippet, peer_snippet
 
     def run(
         self,
@@ -153,16 +192,38 @@ class Orchestrator:
                 k: v for k, v in self.device_config.items()
                 if isinstance(v, bool)
             }
+
+            plugins, snippet, peer_snippet = self._init_plugins(
+                adb, analyzer, serial, suite_config
+            )
+
             runner = TestRunner(
                 adb=adb,
                 visual_analyzer=analyzer,
                 screen_capture=screen_capture,
                 webcam_capture=webcam_capture,
                 device_capabilities=device_capabilities,
+                plugins=plugins,
             )
+            # Inject snippet handles into runner for plugin context
+            runner._snippet = snippet
+            runner._peer_snippet = peer_snippet
+            runner._settings = self.settings
+
             results = runner.run_suite(suite_config)
             if webcam_capture:
                 webcam_capture.close()
+            # Cleanup Mobly devices
+            if hasattr(self, '_mobly_dut'):
+                try:
+                    self._mobly_dut.unload_snippet('mbs')
+                except Exception:
+                    pass
+            if hasattr(self, '_mobly_peer'):
+                try:
+                    self._mobly_peer.unload_snippet('mbs')
+                except Exception:
+                    pass
         else:
             results = []
 
