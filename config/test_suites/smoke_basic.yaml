@@ -253,12 +253,11 @@ test_suite:
         device_capability: "has_sim"
       depends_on: "sim_status"
 
-    # === 功能測試：WiFi 掃描 ===
+    # === 功能測試：WiFi 掃描（不需已連線，WiFi 啟用即可）===
     - id: "wifi_scan"
       name: "WiFi 掃描"
       type: "wifi"
       action: "scan"
-      depends_on: "wifi_connected"
 
     - id: "wifi_scan_ssid"
       name: "WiFi 尋找指定 SSID"
@@ -268,7 +267,7 @@ test_suite:
         expected_ssid: "${WIFI_SSID}"
       depends_on: "wifi_scan"
 
-    # === 功能測試：WiFi 進階 (Tier 1) ===
+    # === 功能測試：WiFi 進階 (Tier 1，需已連線) ===
     - id: "wifi_toggle"
       name: "WiFi 開關切換"
       type: "wifi"
@@ -289,24 +288,21 @@ test_suite:
       action: "dhcp_info"
       depends_on: "wifi_toggle"
 
-    # === 功能測試：WiFi 進階 (Tier 2) ===
+    # === 功能測試：WiFi 能力偵測（不需已連線）===
     - id: "wifi_5ghz"
       name: "WiFi 5GHz 支援"
       type: "wifi"
       action: "is_5ghz_supported"
-      depends_on: "wifi_connected"
 
     - id: "wifi_p2p"
       name: "WiFi P2P 支援"
       type: "wifi"
       action: "is_p2p_supported"
-      depends_on: "wifi_connected"
 
     - id: "wifi_aware"
       name: "WiFi Aware 支援"
       type: "wifi"
       action: "is_aware_available"
-      depends_on: "wifi_connected"
 
     - id: "wifi_hotspot"
       name: "WiFi 熱點開關"
