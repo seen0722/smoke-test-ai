@@ -4,6 +4,7 @@ from smoke_test_ai.drivers.aoa_hid import (
     AoaHidDriver, HID_KEYBOARD_DESCRIPTOR,
     GOOGLE_VID, ACCESSORY_PID, ACCESSORY_ADB_PID,
     ACCESSORY_GET_PROTOCOL, ACCESSORY_SEND_STRING, ACCESSORY_START,
+    HID_KEY_MAP, HID_SHIFT_MAP,
 )
 
 
@@ -191,3 +192,100 @@ class TestAoaHidDriver:
         assert report[0] == 0x01  # tip switch
         assert report[1] == 0x00  # contact id
         assert report[6] == 0x01  # contact count
+
+    @patch("smoke_test_ai.drivers.aoa_hid.usb.core.find")
+    def test_type_text(self, mock_find, mock_accessory_device):
+        """type_text sends key events for each character."""
+        mock_find.return_value = [mock_accessory_device]
+
+        driver = AoaHidDriver(vendor_id=0x099E, product_id=0x02B1)
+        driver.find_device()
+        driver.register_hid(hid_id=1, descriptor=HID_KEYBOARD_DESCRIPTOR)
+
+        initial_calls = mock_accessory_device.ctrl_transfer.call_count
+        driver.type_text(hid_id=1, text="ab")
+
+        # Each character: send_key sends 2 ctrl_transfer calls (press + release)
+        added_calls = mock_accessory_device.ctrl_transfer.call_count - initial_calls
+        assert added_calls == 4  # 2 chars * 2 events each
+
+    @patch("smoke_test_ai.drivers.aoa_hid.usb.core.find")
+    def test_type_text_with_shift(self, mock_find, mock_accessory_device):
+        """type_text applies shift modifier for uppercase letters."""
+        mock_find.return_value = [mock_accessory_device]
+
+        driver = AoaHidDriver(vendor_id=0x099E, product_id=0x02B1)
+        driver.find_device()
+        driver.register_hid(hid_id=1, descriptor=HID_KEYBOARD_DESCRIPTOR)
+
+        driver.type_text(hid_id=1, text="A")
+
+        # Find the key-down call (last two ctrl_transfers: press + release)
+        calls = mock_accessory_device.ctrl_transfer.call_args_list
+        # The press event for 'A' should have modifier 0x02 (LEFT_SHIFT)
+        press_data = calls[-2][0][4]  # 5th positional arg = data bytes
+        assert press_data[0] == 0x02  # modifier byte = LEFT_SHIFT
+
+    @patch("smoke_test_ai.drivers.aoa_hid.usb.core.find")
+    def test_press_back(self, mock_find, mock_accessory_device):
+        """press_back sends Consumer Control AC Back (0x0224)."""
+        mock_find.return_value = [mock_accessory_device]
+
+        driver = AoaHidDriver(vendor_id=0x099E, product_id=0x02B1)
+        driver.find_device()
+        driver.register_consumer(hid_id=3)
+
+        initial_calls = mock_accessory_device.ctrl_transfer.call_count
+        driver.press_back(hid_id=3)
+
+        # send_consumer_key = 2 ctrl_transfer calls (press + release)
+        added = mock_accessory_device.ctrl_transfer.call_count - initial_calls
+        assert added == 2
+
+        # Verify AC Back usage (0x0224) in press event
+        press_data = mock_accessory_device.ctrl_transfer.call_args_list[-2][0][4]
+        assert press_data == b'\x24\x02'  # 0x0224 little-endian
+
+    @patch("smoke_test_ai.drivers.aoa_hid.usb.core.find")
+    def test_press_enter(self, mock_find, mock_accessory_device):
+        """press_enter sends HID Enter key code (0x28)."""
+        mock_find.return_value = [mock_accessory_device]
+
+        driver = AoaHidDriver(vendor_id=0x099E, product_id=0x02B1)
+        driver.find_device()
+        driver.register_hid(hid_id=1, descriptor=HID_KEYBOARD_DESCRIPTOR)
+
+        driver.press_enter(hid_id=1)
+
+        press_data = mock_accessory_device.ctrl_transfer.call_args_list[-2][0][4]
+        assert press_data[2] == 0x28  # key code byte
+
+    def test_char_to_hid_lowercase(self):
+        """_char_to_hid maps lowercase letters correctly."""
+        key, shift = AoaHidDriver._char_to_hid('a')
+        assert key == 0x04
+        assert shift is False
+
+    def test_char_to_hid_uppercase(self):
+        """_char_to_hid maps uppercase letters with shift=True."""
+        key, shift = AoaHidDriver._char_to_hid('A')
+        assert key == 0x04
+        assert shift is True
+
+    def test_char_to_hid_unmapped(self):
+        """_char_to_hid returns (0, False) for unmapped characters."""
+        key, shift = AoaHidDriver._char_to_hid('\x80')
+        assert key == 0
+        assert shift is False
+
+    def test_hid_key_map_completeness(self):
+        """HID_KEY_MAP covers all lowercase letters and digits."""
+        for ch in 'abcdefghijklmnopqrstuvwxyz':
+            assert ch in HID_KEY_MAP
+        for ch in '0123456789':
+            assert ch in HID_KEY_MAP
+
+    def test_hid_shift_map_completeness(self):
+        """HID_SHIFT_MAP covers all uppercase letters."""
+        for ch in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ':
+            assert ch in HID_SHIFT_MAP

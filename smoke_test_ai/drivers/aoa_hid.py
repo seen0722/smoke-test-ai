@@ -6,6 +6,33 @@ from smoke_test_ai.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# HID key codes for keyboard input (USB HID Usage Tables, section 10)
+HID_KEY_MAP = {
+    'a': 0x04, 'b': 0x05, 'c': 0x06, 'd': 0x07, 'e': 0x08, 'f': 0x09,
+    'g': 0x0A, 'h': 0x0B, 'i': 0x0C, 'j': 0x0D, 'k': 0x0E, 'l': 0x0F,
+    'm': 0x10, 'n': 0x11, 'o': 0x12, 'p': 0x13, 'q': 0x14, 'r': 0x15,
+    's': 0x16, 't': 0x17, 'u': 0x18, 'v': 0x19, 'w': 0x1A, 'x': 0x1B,
+    'y': 0x1C, 'z': 0x1D,
+    '1': 0x1E, '2': 0x1F, '3': 0x20, '4': 0x21, '5': 0x22, '6': 0x23,
+    '7': 0x24, '8': 0x25, '9': 0x26, '0': 0x27,
+    '\n': 0x28, '\t': 0x2B, ' ': 0x2C, '-': 0x2D, '=': 0x2E,
+    '[': 0x2F, ']': 0x30, '\\': 0x31, ';': 0x33, "'": 0x34,
+    '`': 0x35, ',': 0x36, '.': 0x37, '/': 0x38,
+}
+
+# Characters that require Shift modifier
+HID_SHIFT_MAP = {
+    'A': 0x04, 'B': 0x05, 'C': 0x06, 'D': 0x07, 'E': 0x08, 'F': 0x09,
+    'G': 0x0A, 'H': 0x0B, 'I': 0x0C, 'J': 0x0D, 'K': 0x0E, 'L': 0x0F,
+    'M': 0x10, 'N': 0x11, 'O': 0x12, 'P': 0x13, 'Q': 0x14, 'R': 0x15,
+    'S': 0x16, 'T': 0x17, 'U': 0x18, 'V': 0x19, 'W': 0x1A, 'X': 0x1B,
+    'Y': 0x1C, 'Z': 0x1D,
+    '!': 0x1E, '@': 0x1F, '#': 0x20, '$': 0x21, '%': 0x22, '^': 0x23,
+    '&': 0x24, '*': 0x25, '(': 0x26, ')': 0x27,
+    '_': 0x2D, '+': 0x2E, '{': 0x2F, '}': 0x30, '|': 0x31,
+    ':': 0x33, '"': 0x34, '~': 0x35, '<': 0x36, '>': 0x37, '?': 0x38,
+}
+
 # AOA2 protocol request codes
 ACCESSORY_GET_PROTOCOL = 51
 ACCESSORY_SEND_STRING = 52
@@ -81,6 +108,22 @@ HID_TOUCH_DESCRIPTOR = bytes([
     0x95, 0x01,
     0x81, 0x02,        #   Input (Data, Variable, Absolute)
     0xC0,              # End Collection (Application)
+])
+
+# Consumer Control HID descriptor — for Android navigation keys (Back, Home, etc.)
+# Report (2 bytes): Usage ID as 16-bit value (0x0000 = release)
+HID_CONSUMER_DESCRIPTOR = bytes([
+    0x05, 0x0C,        # Usage Page (Consumer)
+    0x09, 0x01,        # Usage (Consumer Control)
+    0xA1, 0x01,        # Collection (Application)
+    0x15, 0x00,        #   Logical Minimum (0)
+    0x26, 0xFF, 0x03,  #   Logical Maximum (0x03FF)
+    0x75, 0x10,        #   Report Size (16)
+    0x95, 0x01,        #   Report Count (1)
+    0x19, 0x00,        #   Usage Minimum (0)
+    0x2A, 0xFF, 0x03,  #   Usage Maximum (0x03FF)
+    0x81, 0x00,        #   Input (Data, Array, Absolute)
+    0xC0,              # End Collection
 ])
 
 # Keep old name as alias for backwards compatibility
@@ -232,6 +275,10 @@ class AoaHidDriver:
     def register_touch(self, hid_id: int) -> None:
         self.register_hid(hid_id, HID_TOUCH_DESCRIPTOR)
 
+    def register_consumer(self, hid_id: int) -> None:
+        """Register a Consumer Control HID for navigation keys (Back, Home)."""
+        self.register_hid(hid_id, HID_CONSUMER_DESCRIPTOR)
+
     def register_mouse(self, hid_id: int) -> None:
         """Alias for register_touch (backwards compatibility)."""
         self.register_touch(hid_id)
@@ -286,6 +333,59 @@ class AoaHidDriver:
         this is a toggle: it turns screen OFF if already ON."""
         logger.info("Sending HID Power key to toggle screen")
         self.send_key(keyboard_hid_id, 0x66)
+
+    @staticmethod
+    def _char_to_hid(ch: str) -> tuple[int, bool]:
+        """Convert a character to (hid_key_code, needs_shift)."""
+        if ch in HID_KEY_MAP:
+            return HID_KEY_MAP[ch], False
+        if ch in HID_SHIFT_MAP:
+            return HID_SHIFT_MAP[ch], True
+        logger.warning(f"Unmapped character '{ch}' (0x{ord(ch):02X}), skipping")
+        return 0, False
+
+    def type_text(self, hid_id: int, text: str) -> None:
+        """Type text character-by-character via HID keyboard."""
+        for ch in text:
+            key_code, shift = self._char_to_hid(ch)
+            if key_code == 0:
+                continue
+            modifiers = 0x02 if shift else 0  # LEFT_SHIFT
+            self.send_key(hid_id, key_code, modifiers)
+            time.sleep(0.05)
+
+    def send_consumer_key(self, hid_id: int, usage: int) -> None:
+        """Send a Consumer Control key press and release.
+
+        Args:
+            hid_id: HID device ID registered with register_consumer().
+            usage: 16-bit Consumer Control Usage ID (e.g. 0x0224 = AC Back).
+        """
+        # Press: send usage as little-endian 16-bit
+        self.send_hid_event(hid_id, struct.pack("<H", usage))
+        time.sleep(0.05)
+        # Release: send 0x0000
+        self.send_hid_event(hid_id, struct.pack("<H", 0))
+
+    def press_back(self, hid_id: int) -> None:
+        """Send Consumer Control AC Back → Android KEYCODE_BACK.
+
+        Requires hid_id registered with register_consumer().
+        """
+        logger.info("Sending BACK via Consumer Control AC Back")
+        self.send_consumer_key(hid_id, 0x0224)  # AC Back
+
+    def press_enter(self, hid_id: int) -> None:
+        """Send HID Enter key."""
+        self.send_key(hid_id, 0x28)  # HID Enter
+
+    def press_home(self, hid_id: int) -> None:
+        """Send Consumer Control AC Home → Android KEYCODE_HOME.
+
+        Requires hid_id registered with register_consumer().
+        """
+        logger.info("Sending HOME via Consumer Control AC Home")
+        self.send_consumer_key(hid_id, 0x0223)  # AC Home
 
     def close(self) -> None:
         self._device = None
