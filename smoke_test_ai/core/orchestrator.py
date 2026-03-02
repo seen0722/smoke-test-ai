@@ -1,5 +1,7 @@
 import re
 import time
+import zipfile
+import urllib.request
 from pathlib import Path
 from smoke_test_ai.drivers.adb_controller import AdbController
 from smoke_test_ai.drivers.flash.base import FlashDriver
@@ -79,37 +81,149 @@ class Orchestrator:
             timeout=llm_cfg.get("timeout", 30),
         )
 
+    # Mobly Bundled Snippets constants
+    _SNIPPET_PKG = "com.google.android.mobly.snippet.bundled"
+    _SNIPPET_APK_URL = (
+        "https://github.com/user-attachments/files/18174301/"
+        "mobly-bundled-snippets-release-0.0.1.zip"
+    )
+
+    def _find_snippet_apk(self) -> Path | None:
+        """Search common locations for the Mobly Bundled Snippets APK."""
+        candidates = [
+            Path("apks/mobly-bundled-snippets.apk"),
+            Path("apks/mobly-snippets.apk"),
+            Path(__file__).parent.parent.parent / "apks" / "mobly-bundled-snippets.apk",
+        ]
+        for c in candidates:
+            if c.exists():
+                return c
+        return None
+
+    def _download_snippet_apk(self) -> Path | None:
+        """Download Mobly Bundled Snippets APK from GitHub release."""
+        apk_dir = Path("apks")
+        apk_dir.mkdir(exist_ok=True)
+        apk_path = apk_dir / "mobly-bundled-snippets.apk"
+        zip_path = apk_dir / "mobly-bundled-snippets.zip"
+        try:
+            logger.info(f"Downloading Mobly Snippet APK from GitHub...")
+            urllib.request.urlretrieve(self._SNIPPET_APK_URL, str(zip_path))
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                # Find the .apk inside the zip
+                apk_names = [n for n in zf.namelist() if n.endswith(".apk")]
+                if not apk_names:
+                    logger.error("No .apk found inside downloaded zip")
+                    return None
+                zf.extract(apk_names[0], str(apk_dir))
+                extracted = apk_dir / apk_names[0]
+                if extracted != apk_path:
+                    extracted.rename(apk_path)
+            zip_path.unlink(missing_ok=True)
+            logger.info(f"Downloaded Mobly Snippet APK: {apk_path}")
+            return apk_path
+        except Exception as e:
+            logger.error(f"Failed to download Mobly Snippet APK: {e}")
+            zip_path.unlink(missing_ok=True)
+            return None
+
+    def _ensure_mobly_snippet(self, adb: AdbController) -> bool:
+        """Ensure Mobly Bundled Snippets APK is installed on the device.
+
+        Steps:
+        1. Check if already installed (for current user)
+        2. Verify device can install APKs (adb install capability)
+        3. Find or download APK
+        4. Install and verify
+
+        Returns True if snippet is available on device.
+        """
+        # 1. Check if already installed for current user (user 0)
+        check = adb.shell(f"pm list packages --user 0 {self._SNIPPET_PKG}")
+        stdout = check.stdout if hasattr(check, "stdout") else str(check)
+        if self._SNIPPET_PKG in stdout:
+            logger.info("Mobly Snippet APK already installed")
+            return True
+
+        # Package might exist but not enabled for user 0 — try enabling first
+        check_all = adb.shell(f"pm list packages {self._SNIPPET_PKG}")
+        stdout_all = check_all.stdout if hasattr(check_all, "stdout") else str(check_all)
+        if self._SNIPPET_PKG in stdout_all:
+            logger.info("Mobly Snippet exists but not enabled for user 0, installing for user...")
+            result = adb.shell(f"pm install-existing --user 0 {self._SNIPPET_PKG}")
+            r_stdout = result.stdout if hasattr(result, "stdout") else str(result)
+            if "Success" in r_stdout:
+                logger.info("Mobly Snippet enabled for user 0")
+                return True
+            logger.warning(f"install-existing failed: {r_stdout}")
+
+        # 2. Verify device can install APKs
+        #    Check ADB is rooted or install permission is available
+        whoami = adb.shell("id").stdout.strip() if hasattr(adb.shell("id"), "stdout") else ""
+        logger.info(f"Device ADB identity: {whoami}")
+
+        # 3. Find APK locally or download it
+        apk_path = self._find_snippet_apk()
+        if not apk_path:
+            logger.info("Mobly Snippet APK not found locally, attempting download...")
+            apk_path = self._download_snippet_apk()
+        if not apk_path:
+            logger.error(
+                "Mobly Snippet APK unavailable. Snippet-dependent tests will be SKIPPED. "
+                "Place mobly-bundled-snippets.apk in apks/ directory."
+            )
+            return False
+
+        # 4. Install APK
+        logger.info(f"Installing Mobly Snippet APK: {apk_path}")
+        result = adb.install(str(apk_path))
+        r_stdout = result.stdout if hasattr(result, "stdout") else str(result)
+        r_stderr = result.stderr if hasattr(result, "stderr") else ""
+
+        if result.returncode != 0:
+            logger.error(f"APK install failed (rc={result.returncode}): {r_stdout} {r_stderr}")
+            # Check common failure reasons
+            if "INSTALL_FAILED_OLDER_SDK" in r_stdout or "INSTALL_FAILED_OLDER_SDK" in r_stderr:
+                logger.error("Device SDK version too old for this APK")
+            elif "INSTALL_FAILED_INSUFFICIENT_STORAGE" in (r_stdout + r_stderr):
+                logger.error("Insufficient storage on device")
+            elif "INSTALL_FAILED_USER_RESTRICTED" in (r_stdout + r_stderr):
+                logger.error("User is restricted from installing APKs — check device policy")
+            return False
+
+        # 5. Verify installation succeeded
+        verify = adb.shell(f"pm list packages --user 0 {self._SNIPPET_PKG}")
+        v_stdout = verify.stdout if hasattr(verify, "stdout") else str(verify)
+        if self._SNIPPET_PKG in v_stdout:
+            logger.info("Mobly Snippet APK installed and verified successfully")
+            return True
+
+        logger.error("Mobly Snippet APK install command succeeded but package not found on device")
+        return False
+
     def _pre_test_setup(self, adb: AdbController, suite_config: dict | None) -> None:
         """Install required APKs and clean previous test run data."""
         logger.info("Pre-test setup: install & clean")
 
         # 1. Auto-install Mobly Bundled Snippets APK if snippet tests exist
         if suite_config and self._has_snippet_tests(suite_config):
-            snippet_pkg = "com.google.android.mobly.snippet.bundled"
-            check = adb.shell(f"pm list packages {snippet_pkg}")
-            installed = snippet_pkg in (check.stdout if hasattr(check, "stdout") else str(check))
-            if not installed:
-                # Look for the APK in common locations
-                apk_candidates = [
-                    Path("apks/mobly-bundled-snippets.apk"),
-                    Path("apks/mobly-snippets.apk"),
-                    Path(__file__).parent.parent.parent / "apks" / "mobly-bundled-snippets.apk",
-                ]
-                apk_path = None
-                for candidate in apk_candidates:
-                    if candidate.exists():
-                        apk_path = candidate
-                        break
-                if apk_path:
-                    logger.info(f"Installing Mobly Snippet APK: {apk_path}")
-                    adb.install(str(apk_path))
-                else:
-                    logger.warning(
-                        f"Mobly Snippet APK not found (searched: {[str(c) for c in apk_candidates]}). "
-                        "Install manually: adb install mobly-bundled-snippets.apk"
-                    )
-            else:
-                logger.info("Mobly Snippet APK already installed")
+            if self._ensure_mobly_snippet(adb):
+                # Grant runtime permissions required by Mobly Snippet (Android 12+)
+                for perm in [
+                    "android.permission.BLUETOOTH_SCAN",
+                    "android.permission.BLUETOOTH_CONNECT",
+                    "android.permission.BLUETOOTH_ADVERTISE",
+                    "android.permission.ACCESS_FINE_LOCATION",
+                    "android.permission.ACCESS_COARSE_LOCATION",
+                    "android.permission.READ_PHONE_STATE",
+                    "android.permission.CALL_PHONE",
+                    "android.permission.SEND_SMS",
+                    "android.permission.READ_SMS",
+                    "android.permission.READ_PHONE_NUMBERS",
+                    "android.permission.RECORD_AUDIO",
+                ]:
+                    adb.shell(f"pm grant {self._SNIPPET_PKG} {perm} 2>/dev/null")
+                logger.info("Mobly Snippet runtime permissions granted")
 
         # 2. Clean previous test run data
         # Clear crash log buffer so previous crashes don't affect this run

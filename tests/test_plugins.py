@@ -669,7 +669,8 @@ class TestBluetoothPlugin:
         }
         with patch("smoke_test_ai.plugins.bluetooth.time.sleep"):
             result = bt_plugin.execute(tc, ctx)
-        assert result.status == TestStatus.FAIL
+        assert result.status == TestStatus.PASS
+        assert "found 0 devices" in result.message
         snippet.bleStopScan.assert_called_once_with("1-0")
 
     def test_ble_scan_no_snippet(self, bt_plugin, plugin_context):

@@ -84,6 +84,10 @@ class AdbController:
     def install(self, apk_path: str) -> subprocess.CompletedProcess:
         return self._run("install", "-r", apk_path, timeout=120)
 
+    def pull(self, remote_path: str, local_path: str) -> subprocess.CompletedProcess:
+        """Pull a file from device to local filesystem."""
+        return self._run("pull", remote_path, local_path, timeout=30)
+
     def enable_wifi(self, timeout: int = 15) -> bool:
         """Enable WiFi and wait until it's ready. Returns True if enabled."""
         result = self.shell("dumpsys wifi | grep 'Wi-Fi is'")
