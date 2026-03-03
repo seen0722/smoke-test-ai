@@ -139,3 +139,70 @@ class TestBlindRunnerBasicActions:
             {"action": "home", "delay": 0.5},
         ])
         assert runner.run() is True
+
+
+class TestBlindRunnerWaitForAdb:
+    @patch("smoke_test_ai.drivers.aoa_hid.AoaHidDriver")
+    @patch("smoke_test_ai.runners.blind_runner.time.sleep")
+    def test_wait_for_adb_success(self, mock_sleep, MockHid):
+        """wait_for_adb: close → poll adb → re-init HID → returns True."""
+        runner, hid, adb = _make_runner([
+            {"action": "wait_for_adb", "timeout": 10},
+        ])
+        adb.wait_for_device.return_value = True
+        new_hid = MagicMock()
+        MockHid.return_value = new_hid
+
+        result = runner.run()
+
+        assert result is True
+        hid.close.assert_called_once()
+        adb.wait_for_device.assert_called_once_with(timeout=10)
+        MockHid.assert_called_once_with(
+            vendor_id=0x099E, product_id=0x02B1, rotation=90,
+        )
+        new_hid.find_device.assert_called_once()
+        new_hid.start_accessory.assert_called_once()
+        new_hid.register_touch.assert_called_once_with(2)
+        new_hid.register_consumer.assert_called_once_with(3)
+
+    @patch("smoke_test_ai.runners.blind_runner.time.sleep")
+    def test_wait_for_adb_timeout(self, mock_sleep):
+        """wait_for_adb timeout → run() returns False."""
+        runner, hid, adb = _make_runner([
+            {"action": "wait_for_adb", "timeout": 5},
+        ])
+        adb.wait_for_device.return_value = False
+
+        result = runner.run()
+
+        assert result is False
+        hid.close.assert_called_once()
+
+    @patch("smoke_test_ai.drivers.aoa_hid.AoaHidDriver")
+    @patch("smoke_test_ai.runners.blind_runner.time.sleep")
+    def test_steps_after_wait_use_new_hid(self, mock_sleep, MockHid):
+        """After wait_for_adb, subsequent steps use the re-initialized HID."""
+        new_hid = MagicMock()
+        MockHid.return_value = new_hid
+        runner, old_hid, adb = _make_runner([
+            {"action": "wait_for_adb", "timeout": 10},
+            {"action": "tap", "x": 500, "y": 300, "delay": 0.5},
+        ])
+        adb.wait_for_device.return_value = True
+
+        runner.run()
+
+        old_hid.tap.assert_not_called()
+        new_hid.tap.assert_called_once_with(2, 500, 300, 2560, 1600)
+
+
+class TestBlindRunnerKeyTab:
+    @patch("smoke_test_ai.runners.blind_runner.time.sleep")
+    def test_key_tab(self, mock_sleep):
+        """key=tab calls hid.send_key() with HID tab code 0x2B."""
+        runner, hid, _ = _make_runner([
+            {"action": "key", "key": "tab", "delay": 0.5},
+        ])
+        runner.run()
+        hid.send_key.assert_called_once_with(1, 0x2B)
