@@ -21,6 +21,15 @@ device:
     post_flash:
       - "fastboot reboot"
 
+  aoa:
+    enabled: true
+    vendor_id: 0x099E
+    product_id: 0x02B1
+    rotation: 90            # landscape tablet
+    keyboard_hid_id: 1
+    touch_hid_id: 2
+    consumer_hid_id: 3
+
   screen_capture:
     method: "adb"
     webcam_device: "/dev/video0"
