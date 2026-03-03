@@ -177,5 +177,27 @@ def suites_list(config_dir):
         console.print(f"  {f.stem}: {name} ({count} tests)")
 
 
+@main.command()
+@click.option("--device", required=True, help="Device config name (e.g. product_a)")
+@click.option("--serial", default=None, help="Device serial number for ADB screencap")
+@click.option("--config-dir", default="config", help="Config directory path")
+def record(device, serial, config_dir):
+    """Record a setup flow by clicking on ADB screenshots."""
+    from smoke_test_ai.runners.recorder import StepRecorder
+
+    config_path = Path(config_dir)
+    device_config = load_device_config(config_path / "devices" / f"{device}.yaml")
+    device_name = device_config["device"]["name"]
+
+    flow_name = device_name.lower().replace("-", "_").replace(" ", "_")
+    output_path = config_path / "setup_flows" / f"{flow_name}.yaml"
+
+    console.print(f"[bold]Recording setup flow for {device_name}[/]")
+    console.print(f"Output: {output_path}")
+
+    recorder = StepRecorder(serial=serial, device_name=device_name, output_path=output_path)
+    recorder.run()
+
+
 if __name__ == "__main__":
     main()

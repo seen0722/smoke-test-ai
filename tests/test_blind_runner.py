@@ -206,3 +206,36 @@ class TestBlindRunnerKeyTab:
         ])
         runner.run()
         hid.send_key.assert_called_once_with(1, 0x2B)
+
+
+class TestStepRecorderOutput:
+    def test_save_generates_valid_yaml(self, tmp_path):
+        """StepRecorder._save() outputs valid YAML with correct structure."""
+        from smoke_test_ai.runners.recorder import StepRecorder
+
+        output = tmp_path / "test_flow.yaml"
+        rec = StepRecorder(serial=None, device_name="Test-Device", output_path=output)
+        rec.steps = [
+            {"action": "wake", "delay": 1.0},
+            {"action": "tap", "x": 500, "y": 300, "delay": 2.0, "description": "Tap start"},
+        ]
+        rec._save(screen_w=1080, screen_h=2400)
+
+        import yaml
+        loaded = yaml.safe_load(output.read_text())
+        assert loaded["device"] == "Test-Device"
+        assert loaded["screen_resolution"] == [1080, 2400]
+        assert len(loaded["steps"]) == 2
+        assert loaded["steps"][0]["action"] == "wake"
+        assert loaded["steps"][1]["x"] == 500
+
+    def test_save_empty_steps_skips(self, tmp_path):
+        """StepRecorder._save() with no steps does not create file."""
+        from smoke_test_ai.runners.recorder import StepRecorder
+
+        output = tmp_path / "test_flow.yaml"
+        rec = StepRecorder(serial=None, device_name="Test-Device", output_path=output)
+        rec.steps = []
+        rec._save(screen_w=1080, screen_h=2400)
+
+        assert not output.exists()
