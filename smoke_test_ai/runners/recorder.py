@@ -1,4 +1,5 @@
 import subprocess
+import time
 import cv2
 import numpy as np
 import yaml
@@ -20,6 +21,27 @@ class StepRecorder:
         self.output_path = output_path
         self.steps: list[dict] = []
         self._click_start: tuple[int, int] | None = None
+
+    def _adb_input(self, *args: str) -> None:
+        """Send input command to DUT via ADB."""
+        cmd = ["adb"]
+        if self.serial:
+            cmd.extend(["-s", self.serial])
+        cmd.extend(["shell", "input", *args])
+        subprocess.run(cmd, capture_output=True, timeout=5)
+
+    def _adb_tap(self, x: int, y: int) -> None:
+        self._adb_input("tap", str(x), str(y))
+
+    def _adb_swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300) -> None:
+        self._adb_input("swipe", str(x1), str(y1), str(x2), str(y2), str(duration_ms))
+
+    def _refresh_screenshot(self) -> None:
+        """Capture and display a fresh screenshot."""
+        img = self._adb_screencap()
+        if img is not None:
+            self._current_image = img
+            cv2.imshow(WINDOW_NAME, img)
 
     def _adb_screencap(self) -> np.ndarray | None:
         cmd = ["adb"]
@@ -55,20 +77,30 @@ class StepRecorder:
                         "duration": float(dur), "delay": float(delay),
                         "description": desc or f"Swipe ({sx},{sy})->({x},{y})",
                     })
-                    print(f"  Recorded swipe")
+                    print(f"  Recorded swipe — sending to DUT...")
+                    self._adb_swipe(sx, sy, x, y, int(float(dur) * 1000))
+                    time.sleep(float(delay))
+                    self._refresh_screenshot()
                 else:
                     desc = input(f"  Tap ({x},{y}). Description: ").strip()
                     delay = input("  Delay after [1.0]: ").strip() or "1.0"
                     repeat = input("  Repeat [1]: ").strip() or "1"
+                    repeat_n = int(repeat)
                     step = {
                         "action": "tap", "x": x, "y": y,
                         "delay": float(delay),
                         "description": desc or f"Tap ({x},{y})",
                     }
-                    if int(repeat) > 1:
-                        step["repeat"] = int(repeat)
+                    if repeat_n > 1:
+                        step["repeat"] = repeat_n
                     self.steps.append(step)
-                    print(f"  Recorded tap")
+                    print(f"  Recorded tap — sending to DUT...")
+                    for i in range(repeat_n):
+                        self._adb_tap(x, y)
+                        if repeat_n > 1 and i < repeat_n - 1:
+                            time.sleep(float(delay))
+                    time.sleep(float(delay))
+                    self._refresh_screenshot()
                 self._click_start = None
 
     def run(self) -> None:
