@@ -34,6 +34,30 @@ class Orchestrator:
         self.device_config = device_config["device"]
         self.device_name = self.device_config["name"]
 
+    def _init_aoa_hid(self, aoa_cfg: dict):
+        """Initialize AOA2 HID driver: find device, start accessory mode, register HIDs."""
+        from smoke_test_ai.drivers.aoa_hid import (
+            AoaHidDriver, HID_KEYBOARD_DESCRIPTOR,
+        )
+
+        hid = AoaHidDriver(
+            vendor_id=aoa_cfg["vendor_id"],
+            product_id=aoa_cfg["product_id"],
+            rotation=aoa_cfg.get("rotation", 0),
+        )
+        hid.find_device()
+        hid.start_accessory()
+
+        kbd_id = aoa_cfg.get("keyboard_hid_id", 1)
+        touch_id = aoa_cfg.get("touch_hid_id", 2)
+        consumer_id = aoa_cfg.get("consumer_hid_id", 3)
+        hid.register_hid(kbd_id, HID_KEYBOARD_DESCRIPTOR)
+        hid.register_touch(touch_id)
+        hid.register_consumer(consumer_id)
+
+        logger.info(f"AOA HID initialized (keyboard={kbd_id}, touch={touch_id}, consumer={consumer_id})")
+        return hid
+
     def _get_flash_driver(self, serial: str | None = None) -> FlashDriver:
         profile = self.device_config["flash"]["profile"]
         if profile == "fastboot":
@@ -311,6 +335,7 @@ class Orchestrator:
         build_dir: str | None = None,
         skip_flash: bool = False,
         skip_setup: bool = False,
+        config_dir: str = "config",
     ) -> list[TestResult]:
         adb = AdbController(serial=serial)
 
@@ -323,11 +348,33 @@ class Orchestrator:
             logger.info("Flash complete. Waiting for device boot...")
             time.sleep(10)
 
-        # Stage 1: Pre-ADB Setup
+        # Stage 1: Pre-ADB Setup (Blind AOA2 HID automation)
         if not skip_setup and self.device_config.get("build_type") == "user":
-            logger.info("=== Stage 1: Pre-ADB Setup (Setup Wizard) ===")
-            logger.info("Setup Wizard automation would use AOA2 HID + LLM Vision")
-            logger.info("Skipping actual AOA2 in this run — waiting for ADB...")
+            aoa_cfg = self.device_config.get("aoa", {})
+            if aoa_cfg.get("enabled"):
+                logger.info("=== Stage 1: Pre-ADB Setup (Blind AOA2 HID) ===")
+                flow_name = self.device_config["name"].lower().replace("-", "_").replace(" ", "_")
+                flow_path = Path(config_dir) / "setup_flows" / f"{flow_name}.yaml"
+                if flow_path.exists():
+                    try:
+                        import yaml
+                        from smoke_test_ai.runners.blind_runner import BlindRunner
+
+                        hid = self._init_aoa_hid(aoa_cfg)
+                        flow = yaml.safe_load(flow_path.read_text())
+                        runner = BlindRunner(hid=hid, adb=adb, aoa_config=aoa_cfg, flow_config=flow)
+                        if runner.run():
+                            logger.info("Blind setup flow completed successfully")
+                        else:
+                            logger.warning("Blind setup flow did not complete — ADB may not be available")
+                        hid.close()
+                    except Exception as e:
+                        logger.error(f"Blind setup flow failed: {e}")
+                else:
+                    logger.info(f"No setup flow at {flow_path}, skipping Stage 1")
+            else:
+                logger.info("=== Stage 1: Pre-ADB Setup (AOA not configured) ===")
+                logger.info("Waiting for ADB to become available...")
 
         # Stage 2: ADB Bootstrap
         logger.info("=== Stage 2: ADB Bootstrap ===")

@@ -36,6 +36,7 @@ def run(device, suite, build, serial, skip_flash, skip_setup, config_dir):
         build_dir=build,
         skip_flash=skip_flash,
         skip_setup=skip_setup,
+        config_dir=str(config_path),
     )
 
     passed = sum(1 for r in results if r.passed)
@@ -122,6 +123,7 @@ def reset_test(device, suite, serial, config_dir, boot_timeout):
         suite_config=suite_config,
         skip_flash=True,
         skip_setup=False,
+        config_dir=str(config_path),
     )
 
     passed = sum(1 for r in results if r.passed)
