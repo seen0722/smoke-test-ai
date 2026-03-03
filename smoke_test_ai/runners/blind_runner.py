@@ -1,4 +1,6 @@
+import subprocess
 import time
+import usb.core
 from smoke_test_ai.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -55,7 +57,15 @@ class BlindRunner:
             time.sleep(delay)
             return True
 
-        result = handler(step)
+        try:
+            result = handler(step)
+        except usb.core.USBError as e:
+            logger.warning(f"USB disconnected during '{action}': {e}")
+            logger.info("Auto-reconnecting AOA...")
+            if self._reconnect_aoa():
+                result = True  # Step likely triggered USB re-enum, continue
+            else:
+                return False
 
         if action not in ("sleep", "wait_for_adb"):
             time.sleep(delay)
@@ -66,8 +76,9 @@ class BlindRunner:
         x, y = step["x"], step["y"]
         repeat = step.get("repeat", 1)
         delay = step.get("delay", 1.0)
+        press_duration = step.get("press_duration", 0.05)
         for i in range(repeat):
-            self.hid.tap(self.touch_id, x, y, self.screen_w, self.screen_h)
+            self.hid.tap(self.touch_id, x, y, self.screen_w, self.screen_h, press_duration=press_duration)
             if repeat > 1 and i < repeat - 1:
                 time.sleep(delay)
         return True
@@ -111,37 +122,116 @@ class BlindRunner:
         time.sleep(step.get("duration", 1.0))
         return True
 
+    def _reconnect_aoa(self) -> bool:
+        """Re-establish AOA connection after USB disconnection."""
+        return self._wait_for_adb(timeout=30)
+
     def _do_wait_for_adb(self, step: dict) -> bool:
         timeout = step.get("timeout", 30)
         return self._wait_for_adb(timeout)
 
     def _wait_for_adb(self, timeout: int) -> bool:
-        """Release AOA -> poll ADB -> re-init AOA for RSA tap."""
+        """Wait for USB re-enumeration, re-init AOA if needed."""
         from smoke_test_ai.drivers.aoa_hid import (
             AoaHidDriver, HID_KEYBOARD_DESCRIPTOR,
+            GOOGLE_VID, ACCESSORY_PID, ACCESSORY_ADB_PID,
         )
 
-        logger.info("Releasing AOA for ADB connection...")
+        logger.info("Closing AOA, waiting for USB re-enumeration...")
         self.hid.close()
-        time.sleep(2)
+        time.sleep(3)
 
-        logger.info(f"Waiting for ADB (timeout={timeout}s)...")
-        if not self.adb.wait_for_device(timeout=timeout):
-            logger.error("ADB device not found within timeout")
+        cfg = self.aoa_config
+        deadline = time.time() + timeout
+        found_mode = None
+
+        while time.time() < deadline:
+            # Check USB devices via PyUSB
+            try:
+                for dev in usb.core.find(find_all=True):
+                    if dev.idVendor == GOOGLE_VID and dev.idProduct == ACCESSORY_ADB_PID:
+                        found_mode = "accessory_adb"
+                        break
+                    if dev.idVendor == GOOGLE_VID and dev.idProduct == ACCESSORY_PID:
+                        found_mode = "accessory"
+                        break
+                    # Match by VID only — PID may change after USB debugging toggle
+                    if dev.idVendor == cfg["vendor_id"]:
+                        found_mode = "normal"
+                        logger.info(
+                            f"Device found: VID=0x{dev.idVendor:04X} "
+                            f"PID=0x{dev.idProduct:04X}"
+                        )
+                        break
+            except Exception as e:
+                logger.debug(f"PyUSB scan error: {e}")
+
+            # Fallback: check ADB if PyUSB didn't find it
+            if not found_mode and self.adb is not None:
+                if self.adb.is_connected(allow_unauthorized=True):
+                    found_mode = "normal"
+                    logger.info("Device detected via ADB (PyUSB missed it)")
+
+            if found_mode:
+                break
+            time.sleep(1)
+
+        if not found_mode:
+            logger.error(f"Device not found after USB re-enumeration (timeout={timeout}s)")
             return False
 
-        logger.info("ADB connected. Re-initializing AOA for RSA dialog...")
-        cfg = self.aoa_config
-        self.hid = AoaHidDriver(
-            vendor_id=cfg["vendor_id"],
-            product_id=cfg["product_id"],
-            rotation=cfg.get("rotation", 0),
-        )
-        self.hid.find_device()
-        self.hid.start_accessory()
+        logger.info(f"Device found in {found_mode} mode")
+
+        # Re-init AOA with retry (PyUSB/libusb may need time on macOS)
+        reinit_deadline = time.time() + 30
+        while True:
+            # Force libusb to release cached device handles
+            try:
+                for d in usb.core.find(find_all=True):
+                    usb.util.dispose_resources(d)
+            except Exception:
+                pass
+
+            try:
+                self.hid = AoaHidDriver(
+                    vendor_id=cfg["vendor_id"],
+                    product_id=cfg["product_id"],
+                    rotation=cfg.get("rotation", 0),
+                )
+                self.hid.find_device()
+                break
+            except RuntimeError:
+                if time.time() >= reinit_deadline:
+                    # Last resort: check ioreg to confirm device is on bus
+                    vid = f"{cfg['vendor_id']:04x}"
+                    try:
+                        out = subprocess.run(
+                            ["ioreg", "-p", "IOUSB", "-l"],
+                            capture_output=True, text=True, timeout=5,
+                        ).stdout
+                        if vid in out.lower():
+                            logger.error(
+                                f"Device visible in ioreg (VID={vid}) but "
+                                "PyUSB/libusb cannot access it. "
+                                "Try replugging USB cable."
+                            )
+                        else:
+                            logger.error("Device not found on USB bus")
+                    except Exception:
+                        logger.error("Failed to re-init AOA: PyUSB cannot find device")
+                    return False
+                logger.info("PyUSB can't find device yet, retrying...")
+                time.sleep(3)
+
+        if found_mode == "accessory_adb":
+            logger.info("Device in Accessory+ADB mode, re-registering HID...")
+        else:
+            logger.info("Re-initializing AOA...")
+            self.hid.start_accessory()
+
         self.hid.register_hid(self.kbd_id, HID_KEYBOARD_DESCRIPTOR)
         self.hid.register_touch(self.touch_id)
         self.hid.register_consumer(self.consumer_id)
 
-        logger.info("AOA re-initialized (Accessory+ADB mode)")
+        logger.info("AOA ready, continuing playback")
         return True

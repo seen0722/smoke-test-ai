@@ -1,0 +1,68 @@
+device: Product-A
+screen_resolution:
+- 2160
+- 1080
+steps:
+- action: tap
+  x: 672
+  y: 890
+  delay: 5.0
+  description: Tap Developer options
+- action: swipe
+  x1: 888
+  y1: 803
+  x2: 922
+  y2: 291
+  duration: 0.3
+  delay: 2.5
+  description: Swipe 1 in Developer options
+- action: swipe
+  x1: 1070
+  y1: 962
+  x2: 1102
+  y2: 235
+  duration: 0.3
+  delay: 2.5
+  description: Swipe 2 in Developer options
+- action: swipe
+  x1: 951
+  y1: 905
+  x2: 961
+  y2: 301
+  duration: 0.3
+  delay: 2.5
+  description: Swipe 3 in Developer options
+- action: swipe
+  x1: 1022
+  y1: 810
+  x2: 1030
+  y2: 215
+  duration: 0.3
+  delay: 1.5
+  description: Swipe 4 in Developer options
+- action: swipe
+  x1: 1022
+  y1: 810
+  x2: 1030
+  y2: 430
+  duration: 0.3
+  delay: 1.5
+  description: Swipe 4 in Developer options
+- action: tap
+  x: 2014
+  y: 644
+  delay: 3.0
+  description: disable USB debuging
+- action: tap
+  x: 1636
+  y: 749
+  delay: 1.0
+  description: confirmation
+- action: wait_for_adb
+  timeout: 30
+  description: Wait for USB re-enumeration after debugging toggle
+- action: tap
+  x: 1636
+  y: 749
+  delay: 1.0
+  description: All USB debugging? Allow

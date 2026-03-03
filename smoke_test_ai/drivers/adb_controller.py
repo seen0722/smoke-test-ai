@@ -61,17 +61,20 @@ class AdbController:
                 info[key] = self.serial or self.getprop("ro.serialno")
         return info
 
-    def is_connected(self) -> bool:
+    def is_connected(self, allow_unauthorized: bool = False) -> bool:
         result = self._run("devices")
+        states = ["\tdevice"]
+        if allow_unauthorized:
+            states.append("\tunauthorized")
         if self.serial:
-            return f"{self.serial}\tdevice" in result.stdout
+            return any(f"{self.serial}{s}" in result.stdout for s in states)
         lines = result.stdout.strip().split("\n")
-        return any("\tdevice" in line for line in lines[1:])
+        return any(any(s in line for s in states) for line in lines[1:])
 
-    def wait_for_device(self, timeout: int = 60) -> bool:
+    def wait_for_device(self, timeout: int = 60, allow_unauthorized: bool = False) -> bool:
         deadline = time.time() + timeout
         while time.time() < deadline:
-            if self.is_connected():
+            if self.is_connected(allow_unauthorized=allow_unauthorized):
                 logger.info(f"Device {self.serial or 'any'} connected")
                 return True
             time.sleep(2)

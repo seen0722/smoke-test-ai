@@ -33,7 +33,7 @@ class TestBlindRunnerBasicActions:
             {"action": "tap", "x": 500, "y": 300, "delay": 0.5},
         ])
         runner.run()
-        hid.tap.assert_called_once_with(2, 500, 300, 2560, 1600)
+        hid.tap.assert_called_once_with(2, 500, 300, 2560, 1600, press_duration=0.05)
         mock_sleep.assert_called_with(0.5)
 
     @patch("smoke_test_ai.runners.blind_runner.time.sleep")
@@ -143,21 +143,25 @@ class TestBlindRunnerBasicActions:
 
 class TestBlindRunnerWaitForAdb:
     @patch("smoke_test_ai.drivers.aoa_hid.AoaHidDriver")
+    @patch("smoke_test_ai.runners.blind_runner.usb.core.find")
     @patch("smoke_test_ai.runners.blind_runner.time.sleep")
-    def test_wait_for_adb_success(self, mock_sleep, MockHid):
-        """wait_for_adb: close → poll adb → re-init HID → returns True."""
+    def test_wait_for_adb_success(self, mock_sleep, mock_usb_find, MockHid):
+        """wait_for_adb: close → poll USB → re-init HID → returns True."""
         runner, hid, adb = _make_runner([
             {"action": "wait_for_adb", "timeout": 10},
         ])
-        adb.wait_for_device.return_value = True
         new_hid = MagicMock()
         MockHid.return_value = new_hid
+        # Simulate device found in normal mode
+        fake_dev = MagicMock()
+        fake_dev.idVendor = 0x099E
+        fake_dev.idProduct = 0x02B1
+        mock_usb_find.return_value = [fake_dev]
 
         result = runner.run()
 
         assert result is True
         hid.close.assert_called_once()
-        adb.wait_for_device.assert_called_once_with(timeout=10)
         MockHid.assert_called_once_with(
             vendor_id=0x099E, product_id=0x02B1, rotation=90,
         )
@@ -166,13 +170,18 @@ class TestBlindRunnerWaitForAdb:
         new_hid.register_touch.assert_called_once_with(2)
         new_hid.register_consumer.assert_called_once_with(3)
 
+    @patch("smoke_test_ai.runners.blind_runner.usb.core.find")
     @patch("smoke_test_ai.runners.blind_runner.time.sleep")
-    def test_wait_for_adb_timeout(self, mock_sleep):
+    @patch("smoke_test_ai.runners.blind_runner.time.time")
+    def test_wait_for_adb_timeout(self, mock_time, mock_sleep, mock_usb_find):
         """wait_for_adb timeout → run() returns False."""
         runner, hid, adb = _make_runner([
             {"action": "wait_for_adb", "timeout": 5},
         ])
-        adb.wait_for_device.return_value = False
+        # Simulate time passing beyond timeout
+        mock_time.side_effect = [0, 0, 1, 2, 3, 4, 5, 6]
+        mock_usb_find.return_value = []  # No device found
+        adb.is_connected.return_value = False  # ADB fallback also fails
 
         result = runner.run()
 
@@ -180,8 +189,9 @@ class TestBlindRunnerWaitForAdb:
         hid.close.assert_called_once()
 
     @patch("smoke_test_ai.drivers.aoa_hid.AoaHidDriver")
+    @patch("smoke_test_ai.runners.blind_runner.usb.core.find")
     @patch("smoke_test_ai.runners.blind_runner.time.sleep")
-    def test_steps_after_wait_use_new_hid(self, mock_sleep, MockHid):
+    def test_steps_after_wait_use_new_hid(self, mock_sleep, mock_usb_find, MockHid):
         """After wait_for_adb, subsequent steps use the re-initialized HID."""
         new_hid = MagicMock()
         MockHid.return_value = new_hid
@@ -189,12 +199,16 @@ class TestBlindRunnerWaitForAdb:
             {"action": "wait_for_adb", "timeout": 10},
             {"action": "tap", "x": 500, "y": 300, "delay": 0.5},
         ])
-        adb.wait_for_device.return_value = True
+        # Simulate device found in Accessory+ADB mode
+        fake_dev = MagicMock()
+        fake_dev.idVendor = 0x18D1
+        fake_dev.idProduct = 0x2D01
+        mock_usb_find.return_value = [fake_dev]
 
         runner.run()
 
         old_hid.tap.assert_not_called()
-        new_hid.tap.assert_called_once_with(2, 500, 300, 2560, 1600)
+        new_hid.tap.assert_called_once_with(2, 500, 300, 2560, 1600, press_duration=0.05)
 
 
 class TestBlindRunnerKeyTab:

@@ -177,17 +177,17 @@ class AoaHidDriver:
                             f"PID=0x{dev.idProduct:04X})")
                 return
 
-        # Find in normal mode
+        # Find in normal mode (match VID only — PID may differ with USB debugging)
         for dev in usb.core.find(find_all=True):
-            if dev.idVendor == self.vendor_id and dev.idProduct == self.product_id:
+            if dev.idVendor == self.vendor_id:
                 self._device = dev
                 logger.info(f"Found device: VID=0x{self.vendor_id:04X} "
-                            f"PID=0x{self.product_id:04X}")
+                            f"PID=0x{dev.idProduct:04X}")
                 return
 
         raise RuntimeError(
             f"Android device not found "
-            f"(VID=0x{self.vendor_id:04X}, PID=0x{self.product_id:04X})")
+            f"(VID=0x{self.vendor_id:04X})")
 
     def start_accessory(self, re_enumerate_timeout: float = 5.0) -> None:
         """Switch device to AOA2 Accessory mode for HID support.
@@ -296,11 +296,11 @@ class AoaHidDriver:
         report = struct.pack("BBBBBBBB", 0, 0, 0, 0, 0, 0, 0, 0)
         self.send_hid_event(hid_id, report)
 
-    def tap(self, hid_id: int, x: int, y: int, screen_w: int = 1080, screen_h: int = 2400) -> None:
+    def tap(self, hid_id: int, x: int, y: int, screen_w: int = 1080, screen_h: int = 2400, press_duration: float = 0.05) -> None:
         abs_x = int((x / screen_w) * 10000)
         abs_y = int((y / screen_h) * 10000)
         self.send_hid_event(hid_id, self._touch_report(1, abs_x, abs_y))
-        time.sleep(0.1)
+        time.sleep(press_duration)
         self.send_hid_event(hid_id, self._touch_report(0, abs_x, abs_y))
 
     def swipe(self, hid_id: int, x1: int, y1: int, x2: int, y2: int, screen_w: int = 1080, screen_h: int = 2400, steps: int = 10, duration: float = 0.3) -> None:

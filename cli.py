@@ -199,5 +199,76 @@ def record(device, serial, config_dir):
     recorder.run()
 
 
+@main.command()
+@click.option("--device", required=True, help="Device config name (e.g. product_a)")
+@click.option("--serial", default=None, help="Device serial number")
+@click.option("--config-dir", default="config", help="Config directory path")
+def replay(device, serial, config_dir):
+    """Replay a recorded setup flow via ADB (for testing)."""
+    import subprocess
+    import time
+    import yaml
+
+    config_path = Path(config_dir)
+    device_config = load_device_config(config_path / "devices" / f"{device}.yaml")
+    device_name = device_config["device"]["name"]
+    flow_name = device_name.lower().replace("-", "_").replace(" ", "_")
+    flow_path = config_path / "setup_flows" / f"{flow_name}.yaml"
+
+    if not flow_path.exists():
+        console.print(f"[red]Flow file not found: {flow_path}[/]")
+        raise SystemExit(1)
+
+    flow = yaml.safe_load(flow_path.read_text())
+    steps = flow.get("steps", [])
+    console.print(f"[bold]Replaying {len(steps)} steps for {device_name} via ADB[/]\n")
+
+    def adb_cmd(*args):
+        cmd = ["adb"]
+        if serial:
+            cmd.extend(["-s", serial])
+        cmd.extend(args)
+        subprocess.run(cmd, capture_output=True, timeout=10)
+
+    for i, step in enumerate(steps):
+        action = step["action"]
+        desc = step.get("description", action)
+        delay = step.get("delay", 1.0)
+        console.print(f"  [{i+1}/{len(steps)}] {action}: {desc}")
+
+        if action == "tap":
+            repeat = step.get("repeat", 1)
+            for r in range(repeat):
+                adb_cmd("shell", "input", "tap", str(step["x"]), str(step["y"]))
+                if repeat > 1 and r < repeat - 1:
+                    time.sleep(delay)
+        elif action == "swipe":
+            dur_ms = int(step.get("duration", 0.3) * 1000)
+            adb_cmd("shell", "input", "swipe",
+                    str(step["x1"]), str(step["y1"]),
+                    str(step["x2"]), str(step["y2"]), str(dur_ms))
+        elif action == "type":
+            adb_cmd("shell", "input", "text", step["text"])
+        elif action == "key":
+            key_map = {"enter": "KEYCODE_ENTER", "tab": "KEYCODE_TAB"}
+            adb_cmd("shell", "input", "keyevent", key_map.get(step["key"], step["key"]))
+        elif action == "wake":
+            adb_cmd("shell", "input", "keyevent", "KEYCODE_WAKEUP")
+        elif action == "home":
+            adb_cmd("shell", "input", "keyevent", "KEYCODE_HOME")
+        elif action == "back":
+            adb_cmd("shell", "input", "keyevent", "KEYCODE_BACK")
+        elif action == "sleep":
+            time.sleep(step.get("duration", 1.0))
+            continue
+        elif action == "wait_for_adb":
+            console.print("    [yellow](skipped in ADB replay mode)[/]")
+            continue
+
+        time.sleep(delay)
+
+    console.print(f"\n[bold green]Replay complete ({len(steps)} steps)[/]")
+
+
 if __name__ == "__main__":
     main()
