@@ -157,6 +157,32 @@ smoke-test suites list
 | `audio` | 音頻播放、音量控制、麥克風靜音、裝置偵測、路由資訊 | Mobly Snippet Media/Audio API |
 | `network` | HTTP 下載、TCP 連通性 | ADB curl + Mobly Snippet |
 
+### Google Mobly Bundled Snippets
+
+功能測試（Telephony / WiFi / Bluetooth / Audio / Network）透過 [Google Mobly Bundled Snippets](https://github.com/nicecyj/mobly-bundled-snippets) 實現。
+
+**運作原理：**
+
+```
+Host PC                              DUT (Android)
+┌──────────────┐    ADB + TCP    ┌──────────────────────┐
+│  Plugin      │◄──────────────►│  Mobly Snippets APK   │
+│  (Python)    │   JSON-RPC     │  (Android Service)    │
+│              │                │                       │
+│  snippet.    │  ──request──►  │  TelephonyManager     │
+│  smsSendText │                │  WifiManager          │
+│  (to, body)  │  ◄──result──   │  BluetoothAdapter     │
+│              │                │  AudioManager         │
+└──────────────┘                └──────────────────────┘
+```
+
+1. **安裝** — Orchestrator Stage 2 自動將 `apks/mobly-bundled-snippets.apk` 安裝至 DUT
+2. **啟動** — Plugin 透過 ADB 啟動 Snippet Server（`am instrument`），建立 TCP 連線
+3. **呼叫** — Host 端 Python 發送 JSON-RPC 請求，Snippet APK 呼叫 Android API 並回傳結果
+4. **優勢** — 直接存取 Android Framework API（TelephonyManager、WifiManager 等），不依賴 shell 指令解析
+
+APK 已內建於 `apks/` 目錄，不需額外下載。
+
 ### Plugin 架構
 
 Plugin 系統讓你可以新增需要 Android API 存取的功能測試，而不需要修改核心 framework：
