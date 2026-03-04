@@ -1,4 +1,3 @@
-import time
 import pytest
 import usb.core
 from unittest.mock import MagicMock, patch

@@ -493,8 +493,7 @@ class TestTelephonyPlugin:
             "params": {"to_number": "+1234567890", "body": "dispatch test"},
         }
         result = telephony_plugin.execute(tc, ctx)
-        assert result.status in (TestStatus.PASS, TestStatus.FAIL, TestStatus.SKIP)
-        assert result.status != TestStatus.ERROR
+        assert result.status == TestStatus.PASS
         snippet.sendSms.assert_called_once()
 
     def test_execute_unknown_action_errors(self, telephony_plugin, plugin_context):
@@ -657,8 +656,7 @@ class TestWifiPlugin:
         )
         tc = {"id": "wd1", "name": "Dispatch Scan", "type": "wifi", "action": "scan"}
         result = wifi_plugin.execute(tc, ctx)
-        assert result.status in (TestStatus.PASS, TestStatus.FAIL, TestStatus.SKIP)
-        assert result.status != TestStatus.ERROR
+        assert result.status == TestStatus.FAIL  # empty scan results
         snippet.wifiScanAndGetResults.assert_called_once()
 
     def test_execute_unknown_action_errors(self, wifi_plugin, plugin_context):
@@ -825,8 +823,7 @@ class TestBluetoothPlugin:
         }
         with patch("smoke_test_ai.plugins.bluetooth.time.sleep"):
             result = bt_plugin.execute(tc, ctx)
-        assert result.status in (TestStatus.PASS, TestStatus.FAIL, TestStatus.SKIP)
-        assert result.status != TestStatus.ERROR
+        assert result.status == TestStatus.PASS
         snippet.bleStartScan.assert_called_once_with([], {})
         snippet.bleStopScan.assert_called_once_with("dispatch-1")
 
@@ -975,8 +972,7 @@ class TestAudioPlugin:
         }
         with patch("smoke_test_ai.plugins.audio.time.sleep"):
             result = audio_plugin.execute(tc, ctx)
-        assert result.status in (TestStatus.PASS, TestStatus.FAIL, TestStatus.SKIP)
-        assert result.status != TestStatus.ERROR
+        assert result.status == TestStatus.PASS
         snippet.mediaPlayAudioFile.assert_called_once()
 
     def test_execute_unknown_action_errors(self, audio_plugin, plugin_context):
@@ -1127,8 +1123,7 @@ class TestNetworkPlugin:
             "params": {},
         }
         result = net_plugin.execute(tc, ctx)
-        assert result.status in (TestStatus.PASS, TestStatus.FAIL, TestStatus.SKIP)
-        assert result.status != TestStatus.ERROR
+        assert result.status == TestStatus.PASS
         adb.shell.assert_called_once()
 
     def test_execute_unknown_action_errors(self, net_plugin, plugin_context):
