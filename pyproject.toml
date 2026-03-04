@@ -25,6 +25,7 @@ dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
     "pytest-mock>=3.10",
+    "pytest-cov>=4.0",
 ]
 pdf = [
     "weasyprint>=60.0",
@@ -39,3 +40,10 @@ include = ["smoke_test_ai*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["smoke_test_ai"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
