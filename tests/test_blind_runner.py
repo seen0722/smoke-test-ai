@@ -373,3 +373,73 @@ class TestStepRecorderOutput:
         rec._save(screen_w=1080, screen_h=2400)
 
         assert not output.exists()
+
+
+class TestStepRecorderActions:
+    @patch("smoke_test_ai.runners.recorder.subprocess.run")
+    def test_adb_tap_sends_correct_command(self, mock_run):
+        """_adb_tap(500, 300) with serial='ABC123' sends correct adb command."""
+        from smoke_test_ai.runners.recorder import StepRecorder
+        from pathlib import Path
+
+        rec = StepRecorder(serial="ABC123", device_name="Dev", output_path=Path("/tmp/t.yaml"))
+        rec._adb_tap(500, 300)
+
+        mock_run.assert_called_once_with(
+            ["adb", "-s", "ABC123", "shell", "input", "tap", "500", "300"],
+            capture_output=True, timeout=5,
+        )
+
+    @patch("smoke_test_ai.runners.recorder.subprocess.run")
+    def test_adb_tap_no_serial(self, mock_run):
+        """_adb_tap(100, 200) without serial omits -s flag."""
+        from smoke_test_ai.runners.recorder import StepRecorder
+        from pathlib import Path
+
+        rec = StepRecorder(serial=None, device_name="Dev", output_path=Path("/tmp/t.yaml"))
+        rec._adb_tap(100, 200)
+
+        mock_run.assert_called_once_with(
+            ["adb", "shell", "input", "tap", "100", "200"],
+            capture_output=True, timeout=5,
+        )
+
+    @patch("smoke_test_ai.runners.recorder.subprocess.run")
+    def test_adb_swipe_sends_correct_command(self, mock_run):
+        """_adb_swipe(100, 200, 300, 400, 500) sends correct adb command."""
+        from smoke_test_ai.runners.recorder import StepRecorder
+        from pathlib import Path
+
+        rec = StepRecorder(serial="ABC123", device_name="Dev", output_path=Path("/tmp/t.yaml"))
+        rec._adb_swipe(100, 200, 300, 400, 500)
+
+        mock_run.assert_called_once_with(
+            ["adb", "-s", "ABC123", "shell", "input", "swipe", "100", "200", "300", "400", "500"],
+            capture_output=True, timeout=5,
+        )
+
+    def test_mouse_callback_tap_detection(self):
+        """Mouse down at (100,200) then up at (105,205) → tap (within 20px threshold)."""
+        import cv2
+        from smoke_test_ai.runners.recorder import StepRecorder
+        from pathlib import Path
+
+        rec = StepRecorder(serial=None, device_name="Dev", output_path=Path("/tmp/t.yaml"))
+        rec._mouse_callback(cv2.EVENT_LBUTTONDOWN, 100, 200, 0, None)
+        rec._mouse_callback(cv2.EVENT_LBUTTONUP, 105, 205, 0, None)
+
+        assert rec._pending_tap == (105, 205)
+        assert rec._pending_swipe is None
+
+    def test_mouse_callback_swipe_detection(self):
+        """Mouse down at (100,200) then up at (100,300) → swipe (beyond 20px threshold)."""
+        import cv2
+        from smoke_test_ai.runners.recorder import StepRecorder
+        from pathlib import Path
+
+        rec = StepRecorder(serial=None, device_name="Dev", output_path=Path("/tmp/t.yaml"))
+        rec._mouse_callback(cv2.EVENT_LBUTTONDOWN, 100, 200, 0, None)
+        rec._mouse_callback(cv2.EVENT_LBUTTONUP, 100, 300, 0, None)
+
+        assert rec._pending_swipe == (100, 200, 100, 300)
+        assert rec._pending_tap is None
