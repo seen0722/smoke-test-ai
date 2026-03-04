@@ -21,13 +21,14 @@ Host PC (Linux/Mac/Win)
 │   │   ├── Blind Runner (YAML 預錄步驟播放)
 │   │   └── Step Recorder (OpenCV 互動錄製器)
 │   ├── Test Runner (6 test types)
-│   │   └── Plugin System
-│   │       ├── TelephonyPlugin (SMS/Call via Mobly Snippet)
-│   │       ├── CameraPlugin (ADB intent + LLM Vision)
-│   │       ├── WifiPlugin (WiFi scan via Mobly Snippet)
-│   │       ├── BluetoothPlugin (BLE scan via Mobly Snippet)
-│   │       ├── AudioPlugin (Audio playback via Mobly Snippet)
-│   │       └── NetworkPlugin (HTTP download + TCP connect)
+│   │   ├── Plugin System
+│   │   │   ├── TelephonyPlugin (SMS/Call via Mobly Snippet)
+│   │   │   ├── CameraPlugin (ADB intent + LLM Vision)
+│   │   │   ├── WifiPlugin (WiFi scan via Mobly Snippet)
+│   │   │   ├── BluetoothPlugin (BLE scan via Mobly Snippet)
+│   │   │   ├── AudioPlugin (Audio playback via Mobly Snippet)
+│   │   │   └── NetworkPlugin (HTTP download + TCP connect)
+│   │   └── Mobly Bundled Snippets APK (apks/ — 自動安裝至 DUT)
 │   └── Reporter (CLI / JSON / HTML / Test Plan)
 │
 ├── USB Hub
