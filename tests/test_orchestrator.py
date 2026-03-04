@@ -1,5 +1,6 @@
 import pytest
 import subprocess
+import yaml
 from unittest.mock import patch, MagicMock, call
 from pathlib import Path
 from smoke_test_ai.core.orchestrator import Orchestrator
@@ -196,3 +197,124 @@ class TestEnsureMoblySnippet:
              patch.object(orch, "_download_snippet_apk", return_value=apk_file):
             assert orch._ensure_mobly_snippet(adb) is True
         adb.install.assert_called_once_with(str(apk_file))
+
+
+class TestOrchestratorRun:
+    """Tests for Orchestrator.run() pipeline stages."""
+
+    def _mock_adb(self, wait_for_device=True, user_state="RUNNING_UNLOCKED", wifi_connected=True):
+        """Create a mock AdbController with sensible defaults."""
+        adb = MagicMock()
+        adb.wait_for_device.return_value = wait_for_device
+        adb.get_user_state.return_value = user_state
+        adb.is_wifi_connected.return_value = wifi_connected
+        adb.shell.return_value = _make_shell_result("")
+        adb.get_device_info.return_value = {"model": "Test", "sdk": "33"}
+        adb.skip_setup_wizard.return_value = True
+        adb.unlock_keyguard.return_value = True
+        return adb
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_run_skips_flash_when_no_build_dir(self, MockAdb, mock_sleep, settings, device_config):
+        """run() without build_dir skips Stage 0 — _get_flash_driver never called."""
+        orch = Orchestrator(settings=settings, device_config=device_config)
+        mock_adb_inst = self._mock_adb()
+        MockAdb.return_value = mock_adb_inst
+
+        with patch.object(orch, "_get_flash_driver") as mock_flash, \
+             patch.object(orch, "_generate_reports"), \
+             patch.object(orch, "_pre_test_setup"):
+            orch.run(serial="FAKE", build_dir=None)
+            mock_flash.assert_not_called()
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_run_calls_flash_with_build_dir(self, MockAdb, mock_sleep, settings, device_config):
+        """run() with build_dir triggers Stage 0 — flash driver's flash() called."""
+        orch = Orchestrator(settings=settings, device_config=device_config)
+        mock_adb_inst = self._mock_adb()
+        MockAdb.return_value = mock_adb_inst
+
+        mock_flash_driver = MagicMock()
+        with patch.object(orch, "_get_flash_driver", return_value=mock_flash_driver) as mock_get_flash, \
+             patch.object(orch, "_generate_reports"), \
+             patch.object(orch, "_pre_test_setup"):
+            orch.run(serial="FAKE", build_dir="/some/build")
+            mock_get_flash.assert_called_once_with(serial="FAKE")
+            mock_flash_driver.flash.assert_called_once()
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_run_generates_reports(self, MockAdb, mock_sleep, settings, device_config):
+        """run() calls _generate_reports at end exactly once."""
+        orch = Orchestrator(settings=settings, device_config=device_config)
+        mock_adb_inst = self._mock_adb()
+        MockAdb.return_value = mock_adb_inst
+
+        with patch.object(orch, "_generate_reports") as mock_reports, \
+             patch.object(orch, "_pre_test_setup"):
+            orch.run(serial="FAKE")
+            mock_reports.assert_called_once()
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_run_returns_empty_when_adb_timeout(self, MockAdb, mock_sleep, settings, device_config):
+        """ADB wait_for_device returns False -> run() returns []."""
+        orch = Orchestrator(settings=settings, device_config=device_config)
+        mock_adb_inst = self._mock_adb(wait_for_device=False)
+        MockAdb.return_value = mock_adb_inst
+
+        with patch.object(orch, "_generate_reports"), \
+             patch.object(orch, "_pre_test_setup"):
+            result = orch.run(serial="FAKE")
+            assert result == []
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_run_blind_setup_when_user_build(self, MockAdb, mock_sleep, settings, device_config, tmp_path):
+        """For user build with AOA config, triggers BlindRunner with setup flow YAML."""
+        # Add AOA config to device_config
+        device_config["device"]["aoa"] = {
+            "enabled": True,
+            "vendor_id": 0x18D1,
+            "product_id": 0x4EE2,
+        }
+        device_config["device"]["build_type"] = "user"
+
+        # Create minimal flow YAML
+        flow_dir = tmp_path / "setup_flows"
+        flow_dir.mkdir()
+        flow_yaml = flow_dir / "product_a.yaml"
+        flow_yaml.write_text(yaml.dump({"steps": [{"action": "tap", "x": 100, "y": 200}]}))
+
+        orch = Orchestrator(settings=settings, device_config=device_config)
+        mock_adb_inst = self._mock_adb()
+        MockAdb.return_value = mock_adb_inst
+
+        mock_hid = MagicMock()
+        mock_blind_runner = MagicMock()
+        mock_blind_runner.run.return_value = True
+
+        with patch.object(orch, "_init_aoa_hid", return_value=mock_hid) as mock_init_hid, \
+             patch("smoke_test_ai.runners.blind_runner.BlindRunner", return_value=mock_blind_runner) as MockBlindRunner, \
+             patch.object(orch, "_generate_reports"), \
+             patch.object(orch, "_pre_test_setup"):
+            orch.run(serial="FAKE", config_dir=str(tmp_path))
+            mock_init_hid.assert_called_once()
+            MockBlindRunner.assert_called_once()
+            mock_hid.close.assert_called_once()
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_run_unlocks_fbe_when_locked(self, MockAdb, mock_sleep, settings, device_config):
+        """get_user_state returns 'RUNNING_LOCKED' -> unlock_keyguard called with pin."""
+        device_config["device"]["lock_pin"] = "0000"
+        orch = Orchestrator(settings=settings, device_config=device_config)
+        mock_adb_inst = self._mock_adb(user_state="RUNNING_LOCKED")
+        MockAdb.return_value = mock_adb_inst
+
+        with patch.object(orch, "_generate_reports"), \
+             patch.object(orch, "_pre_test_setup"):
+            orch.run(serial="FAKE")
+            mock_adb_inst.unlock_keyguard.assert_called_once_with(pin="0000")
