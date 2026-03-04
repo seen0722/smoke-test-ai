@@ -1,5 +1,6 @@
 import time
 import pytest
+import usb.core
 from unittest.mock import MagicMock, patch
 
 from smoke_test_ai.runners.blind_runner import BlindRunner
@@ -220,6 +221,125 @@ class TestBlindRunnerKeyTab:
         ])
         runner.run()
         hid.send_key.assert_called_once_with(1, 0x2B)
+
+
+class TestBlindRunnerUSBError:
+    @patch("smoke_test_ai.runners.blind_runner.time.sleep")
+    def test_usb_error_triggers_reconnect(self, mock_sleep):
+        """USBError during step triggers _reconnect_aoa and continues (returns True)."""
+        runner, hid, adb = _make_runner([
+            {"action": "wake", "delay": 0.5},
+        ])
+        hid.wake_screen.side_effect = usb.core.USBError("device disconnected")
+        runner._reconnect_aoa = MagicMock(return_value=True)
+
+        result = runner.run()
+
+        assert result is True
+        runner._reconnect_aoa.assert_called_once()
+
+    @patch("smoke_test_ai.runners.blind_runner.time.sleep")
+    def test_usb_error_reconnect_fails(self, mock_sleep):
+        """USBError + reconnect failure -> run returns False."""
+        runner, hid, adb = _make_runner([
+            {"action": "wake", "delay": 0.5},
+        ])
+        hid.wake_screen.side_effect = usb.core.USBError("device disconnected")
+        runner._reconnect_aoa = MagicMock(return_value=False)
+
+        result = runner.run()
+
+        assert result is False
+        runner._reconnect_aoa.assert_called_once()
+
+    @patch("smoke_test_ai.runners.blind_runner.time.sleep")
+    def test_reconnect_aoa_delegates_to_wait_for_adb(self, mock_sleep):
+        """_reconnect_aoa calls _wait_for_adb(timeout=30)."""
+        runner, hid, adb = _make_runner([
+            {"action": "wake"},
+        ])
+        runner._wait_for_adb = MagicMock(return_value=True)
+
+        result = runner._reconnect_aoa()
+
+        assert result is True
+        runner._wait_for_adb.assert_called_once_with(timeout=30)
+
+
+class TestBlindRunnerAdbFallback:
+    @patch("smoke_test_ai.drivers.aoa_hid.AoaHidDriver")
+    @patch("smoke_test_ai.runners.blind_runner.usb.core.find")
+    @patch("smoke_test_ai.runners.blind_runner.time.sleep")
+    def test_wait_for_adb_adb_fallback(self, mock_sleep, mock_usb_find, MockHid):
+        """USB scan finds nothing, ADB fallback detects device, returns True."""
+        runner, hid, adb = _make_runner([
+            {"action": "wait_for_adb", "timeout": 10},
+        ])
+        new_hid = MagicMock()
+        MockHid.return_value = new_hid
+
+        # USB scan returns no matching devices
+        mock_usb_find.return_value = []
+        # ADB fallback detects the device
+        adb.is_connected.return_value = True
+
+        result = runner.run()
+
+        assert result is True
+        adb.is_connected.assert_called_with(allow_unauthorized=True)
+
+    @patch("smoke_test_ai.drivers.aoa_hid.AoaHidDriver")
+    @patch("smoke_test_ai.runners.blind_runner.usb.util.dispose_resources")
+    @patch("smoke_test_ai.runners.blind_runner.usb.core.find")
+    @patch("smoke_test_ai.runners.blind_runner.time.sleep")
+    def test_wait_for_adb_dispose_resources_called(
+        self, mock_sleep, mock_usb_find, mock_dispose, MockHid
+    ):
+        """usb.util.dispose_resources is called during AOA re-init."""
+        runner, hid, adb = _make_runner([
+            {"action": "wait_for_adb", "timeout": 10},
+        ])
+        new_hid = MagicMock()
+        MockHid.return_value = new_hid
+
+        fake_dev = MagicMock()
+        fake_dev.idVendor = 0x099E
+        fake_dev.idProduct = 0x02B1
+        mock_usb_find.return_value = [fake_dev]
+
+        result = runner.run()
+
+        assert result is True
+        mock_dispose.assert_called()
+
+    @patch("smoke_test_ai.runners.blind_runner.time.sleep")
+    def test_tap_custom_press_duration(self, mock_sleep):
+        """YAML step with press_duration: 0.2 forwards correctly to hid.tap()."""
+        runner, hid, _ = _make_runner([
+            {"action": "tap", "x": 500, "y": 300, "press_duration": 0.2, "delay": 0.5},
+        ])
+        runner.run()
+        hid.tap.assert_called_once_with(
+            2, 500, 300, 2560, 1600, press_duration=0.2,
+        )
+
+    @patch("smoke_test_ai.runners.blind_runner.usb.core.find")
+    @patch("smoke_test_ai.runners.blind_runner.time.sleep")
+    @patch("smoke_test_ai.runners.blind_runner.time.time")
+    def test_wait_for_adb_both_fail(self, mock_time, mock_sleep, mock_usb_find):
+        """Both USB scan and ADB fallback fail -> timeout returns False."""
+        runner, hid, adb = _make_runner([
+            {"action": "wait_for_adb", "timeout": 5},
+        ])
+        # Simulate time passing beyond timeout
+        mock_time.side_effect = [0, 0, 1, 2, 3, 4, 5, 6]
+        mock_usb_find.return_value = []
+        adb.is_connected.return_value = False
+
+        result = runner.run()
+
+        assert result is False
+        adb.is_connected.assert_called_with(allow_unauthorized=True)
 
 
 class TestStepRecorderOutput:
