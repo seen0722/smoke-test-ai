@@ -480,6 +480,32 @@ class TestTelephonyPlugin:
         result = telephony_plugin.execute(tc, ctx)
         assert result.status == TestStatus.FAIL
 
+    def test_execute_dispatches_send_sms(self, telephony_plugin):
+        snippet = MagicMock()
+        snippet.sendSms.return_value = None
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "td1", "name": "Dispatch SMS", "type": "telephony",
+            "action": "send_sms",
+            "params": {"to_number": "+1234567890", "body": "dispatch test"},
+        }
+        result = telephony_plugin.execute(tc, ctx)
+        assert result.status in (TestStatus.PASS, TestStatus.FAIL, TestStatus.SKIP)
+        assert result.status != TestStatus.ERROR
+        snippet.sendSms.assert_called_once()
+
+    def test_execute_unknown_action_errors(self, telephony_plugin, plugin_context):
+        tc = {
+            "id": "td2", "name": "Unknown", "type": "telephony",
+            "action": "nonexistent",
+        }
+        result = telephony_plugin.execute(tc, plugin_context)
+        assert result.status == TestStatus.ERROR
+        assert "Unknown" in result.message
+
 
 class TestWifiPlugin:
     @pytest.fixture
@@ -622,6 +648,28 @@ class TestWifiPlugin:
             result = wifi_plugin.execute(tc, ctx)
         assert result.status == TestStatus.PASS
 
+    def test_execute_dispatches_scan(self, wifi_plugin):
+        snippet = MagicMock()
+        snippet.wifiScanAndGetResults.return_value = []
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {"id": "wd1", "name": "Dispatch Scan", "type": "wifi", "action": "scan"}
+        result = wifi_plugin.execute(tc, ctx)
+        assert result.status in (TestStatus.PASS, TestStatus.FAIL, TestStatus.SKIP)
+        assert result.status != TestStatus.ERROR
+        snippet.wifiScanAndGetResults.assert_called_once()
+
+    def test_execute_unknown_action_errors(self, wifi_plugin, plugin_context):
+        tc = {
+            "id": "wd2", "name": "Unknown", "type": "wifi",
+            "action": "nonexistent",
+        }
+        result = wifi_plugin.execute(tc, plugin_context)
+        assert result.status == TestStatus.ERROR
+        assert "Unknown" in result.message
+
 
 class TestBluetoothPlugin:
     @pytest.fixture
@@ -760,6 +808,37 @@ class TestBluetoothPlugin:
         assert result.status == TestStatus.PASS
         assert "not supported" in result.message
 
+    def test_execute_dispatches_ble_scan(self, bt_plugin):
+        snippet = MagicMock()
+        handler = MagicMock()
+        handler.callback_id = "dispatch-1"
+        handler.waitAndGet.side_effect = TimeoutError("no events")
+        snippet.bleStartScan.return_value = handler
+        ctx = PluginContext(
+            adb=MagicMock(), settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "btd1", "name": "Dispatch BLE Scan", "type": "bluetooth",
+            "action": "ble_scan",
+            "params": {"scan_duration": 0},
+        }
+        with patch("smoke_test_ai.plugins.bluetooth.time.sleep"):
+            result = bt_plugin.execute(tc, ctx)
+        assert result.status in (TestStatus.PASS, TestStatus.FAIL, TestStatus.SKIP)
+        assert result.status != TestStatus.ERROR
+        snippet.bleStartScan.assert_called_once_with([], {})
+        snippet.bleStopScan.assert_called_once_with("dispatch-1")
+
+    def test_execute_unknown_action_errors(self, bt_plugin, plugin_context):
+        tc = {
+            "id": "btd2", "name": "Unknown", "type": "bluetooth",
+            "action": "nonexistent",
+        }
+        result = bt_plugin.execute(tc, plugin_context)
+        assert result.status == TestStatus.ERROR
+        assert "Unknown" in result.message
+
 
 class TestAudioPlugin:
     @pytest.fixture
@@ -879,6 +958,35 @@ class TestAudioPlugin:
         result = audio_plugin.execute(tc, ctx)
         assert result.status == TestStatus.PASS
         assert "Speaker" in result.message
+
+    def test_execute_dispatches_play_and_check(self, audio_plugin):
+        snippet = MagicMock()
+        snippet.isMusicActive.return_value = True
+        adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout="exists\n")
+        ctx = PluginContext(
+            adb=adb, settings={}, device_capabilities={},
+            snippet=snippet,
+        )
+        tc = {
+            "id": "ad1", "name": "Dispatch Play", "type": "audio",
+            "action": "play_and_check",
+            "params": {"play_duration": 0},
+        }
+        with patch("smoke_test_ai.plugins.audio.time.sleep"):
+            result = audio_plugin.execute(tc, ctx)
+        assert result.status in (TestStatus.PASS, TestStatus.FAIL, TestStatus.SKIP)
+        assert result.status != TestStatus.ERROR
+        snippet.mediaPlayAudioFile.assert_called_once()
+
+    def test_execute_unknown_action_errors(self, audio_plugin, plugin_context):
+        tc = {
+            "id": "ad2", "name": "Unknown", "type": "audio",
+            "action": "nonexistent",
+        }
+        result = audio_plugin.execute(tc, plugin_context)
+        assert result.status == TestStatus.ERROR
+        assert "Unknown" in result.message
 
 
 class TestNetworkPlugin:
@@ -1006,3 +1114,28 @@ class TestNetworkPlugin:
         }
         result = net_plugin.execute(tc, plugin_context)
         assert result.status == TestStatus.SKIP
+
+    def test_execute_dispatches_http_download(self, net_plugin):
+        adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout="204 0.000\n")
+        ctx = PluginContext(
+            adb=adb, settings={}, device_capabilities={},
+        )
+        tc = {
+            "id": "nd1", "name": "Dispatch Download", "type": "network",
+            "action": "http_download",
+            "params": {},
+        }
+        result = net_plugin.execute(tc, ctx)
+        assert result.status in (TestStatus.PASS, TestStatus.FAIL, TestStatus.SKIP)
+        assert result.status != TestStatus.ERROR
+        adb.shell.assert_called_once()
+
+    def test_execute_unknown_action_errors(self, net_plugin, plugin_context):
+        tc = {
+            "id": "nd2", "name": "Unknown", "type": "network",
+            "action": "nonexistent",
+        }
+        result = net_plugin.execute(tc, plugin_context)
+        assert result.status == TestStatus.ERROR
+        assert "Unknown" in result.message
