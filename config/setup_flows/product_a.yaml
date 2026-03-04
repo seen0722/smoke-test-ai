@@ -4,6 +4,88 @@ screen_resolution:
 - 1080
 steps:
 - action: tap
+  x: 2046
+  y: 932
+  delay: 1.0
+  description: click setting
+- action: swipe
+  x1: 998
+  y1: 992
+  x2: 1034
+  y2: 70
+  duration: 0.3
+  delay: 1.5
+  description: swip
+- action: swipe
+  x1: 1000
+  y1: 995
+  x2: 1070
+  y2: 150
+  duration: 0.3
+  delay: 1.5
+  description: swip
+- action: swipe
+  x1: 1093
+  y1: 1004
+  x2: 1120
+  y2: 213
+  duration: 0.3
+  delay: 1.5
+  description: swip
+- action: tap
+  x: 252
+  y: 967
+  delay: 1.0
+  description: click About
+- action: swipe
+  x1: 999
+  y1: 990
+  x2: 1024
+  y2: 178
+  duration: 0.3
+  delay: 1.5
+  description: swip 1
+- action: swipe
+  x1: 973
+  y1: 965
+  x2: 989
+  y2: 225
+  duration: 0.3
+  delay: 1.5
+  description: swip 2
+- action: swipe
+  x1: 1009
+  y1: 996
+  x2: 1028
+  y2: 162
+  duration: 0.3
+  delay: 1.5
+  description: swip 3
+- action: tap
+  x: 177
+  y: 990
+  delay: 1.0
+  description: build number
+  repeat: 7
+- action: tap
+  x: 66
+  y: 114
+  delay: 5.0
+  description: back
+- action: tap
+  x: 329
+  y: 734
+  delay: 1.0
+  description: system item
+- action: swipe
+  x1: 898
+  y1: 990
+  x2: 869
+  y2: 56
+  duration: 0.3
+  delay: 1.5
+  description: swip 1 on system page
+- action: tap
   x: 672
   y: 890
   delay: 5.0
@@ -47,7 +129,7 @@ steps:
   y2: 430
   duration: 0.3
   delay: 1.5
-  description: Swipe 4 in Developer options
+  description: Swipe 5 in Developer options
 - action: tap
   x: 2014
   y: 644
