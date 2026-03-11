@@ -35,6 +35,11 @@ device:
     webcam_device: "/dev/video0"
     webcam_crop: [100, 50, 1080, 1920]
 
+  usb_power:
+    hub_location: "1-1"
+    port: 1
+    off_duration: 3.0
+
   setup_wizard:
     method: "llm_vision"
     max_steps: 30
