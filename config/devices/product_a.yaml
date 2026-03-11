@@ -39,7 +39,7 @@ device:
     hub_location: "1-1"
     port: 1
     off_duration: 3.0
-    reset_delay: 10              # 秒，factory reset 後等待裝置關機再斷電
+    reset_delay: 3               # 秒，factory reset 後等待裝置關機再斷電
 
   setup_wizard:
     method: "llm_vision"

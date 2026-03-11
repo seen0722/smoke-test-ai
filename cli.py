@@ -113,7 +113,7 @@ def reset_test(device, suite, serial, config_dir, boot_timeout, reset_delay):
             port=usb_power_cfg["port"],
             off_duration=usb_power_cfg.get("off_duration", 3.0),
         )
-        delay = reset_delay or usb_power_cfg.get("reset_delay", 10)
+        delay = reset_delay or usb_power_cfg.get("reset_delay", 3)
         console.print(f"[cyan]Waiting {delay}s for device shutdown before USB power cycle...[/]")
         import time
         time.sleep(delay)
