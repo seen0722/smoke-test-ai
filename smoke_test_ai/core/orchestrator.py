@@ -457,6 +457,7 @@ class Orchestrator:
                 k: v for k, v in self.device_config.items()
                 if isinstance(v, bool)
             }
+            device_capabilities["usb_power"] = usb_power is not None
 
             plugins, snippet, peer_snippet = self._init_plugins(
                 adb, analyzer, serial, suite_config
