@@ -13,6 +13,7 @@ class PluginContext:
     snippet: object | None = None
     peer_snippet: object | None = None
     visual_analyzer: object | None = None
+    usb_power: object | None = None
 
 
 class TestPlugin(ABC):
