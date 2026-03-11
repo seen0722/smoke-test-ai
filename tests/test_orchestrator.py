@@ -307,6 +307,43 @@ class TestOrchestratorRun:
 
     @patch("smoke_test_ai.core.orchestrator.time.sleep")
     @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_flash_triggers_power_cycle(self, MockAdb, mock_sleep, settings, device_config):
+        """After flash, power_cycle is called if usb_power configured."""
+        device_config["device"]["usb_power"] = {
+            "hub_location": "1-1", "port": 1, "off_duration": 2.0,
+        }
+        orch = Orchestrator(settings=settings, device_config=device_config)
+        mock_adb_inst = self._mock_adb()
+        MockAdb.return_value = mock_adb_inst
+
+        mock_flash_driver = MagicMock()
+        with patch.object(orch, "_get_flash_driver", return_value=mock_flash_driver), \
+             patch.object(orch, "_generate_reports"), \
+             patch.object(orch, "_pre_test_setup"), \
+             patch("smoke_test_ai.core.orchestrator.UsbPowerController") as MockPower:
+            mock_power = MagicMock()
+            mock_power.power_cycle.return_value = True
+            MockPower.return_value = mock_power
+            orch.run(serial="FAKE", build_dir="/some/build")
+            mock_power.power_cycle.assert_called_once()
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_flash_no_power_cycle_when_unconfigured(self, MockAdb, mock_sleep, settings, device_config):
+        """Without usb_power config, no power cycle after flash."""
+        orch = Orchestrator(settings=settings, device_config=device_config)
+        mock_adb_inst = self._mock_adb()
+        MockAdb.return_value = mock_adb_inst
+
+        mock_flash_driver = MagicMock()
+        with patch.object(orch, "_get_flash_driver", return_value=mock_flash_driver), \
+             patch.object(orch, "_generate_reports"), \
+             patch.object(orch, "_pre_test_setup"):
+            orch.run(serial="FAKE", build_dir="/some/build")
+            # No crash, no power cycle call — just ensure it doesn't crash
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
     def test_run_unlocks_fbe_when_locked(self, MockAdb, mock_sleep, settings, device_config):
         """get_user_state returns 'RUNNING_LOCKED' -> unlock_keyguard called with pin."""
         device_config["device"]["lock_pin"] = "0000"

@@ -4,6 +4,7 @@ import zipfile
 import urllib.request
 from pathlib import Path
 from smoke_test_ai.drivers.adb_controller import AdbController
+from smoke_test_ai.drivers.usb_power import UsbPowerController
 from smoke_test_ai.drivers.flash.base import FlashDriver
 from smoke_test_ai.drivers.flash.fastboot import FastbootFlashDriver
 from smoke_test_ai.drivers.flash.custom import CustomFlashDriver
@@ -339,6 +340,14 @@ class Orchestrator:
     ) -> list[TestResult]:
         adb = AdbController(serial=serial)
 
+        # Initialize USB power controller if configured
+        usb_power_cfg = self.device_config.get("usb_power")
+        usb_power = UsbPowerController(
+            hub_location=usb_power_cfg["hub_location"],
+            port=usb_power_cfg["port"],
+            off_duration=usb_power_cfg.get("off_duration", 3.0),
+        ) if usb_power_cfg else None
+
         # Stage 0: Flash
         if not skip_flash and build_dir:
             logger.info("=== Stage 0: Flash Image ===")
@@ -347,6 +356,10 @@ class Orchestrator:
             flash_driver.flash(flash_config)
             logger.info("Flash complete. Waiting for device boot...")
             time.sleep(10)
+
+            if usb_power:
+                logger.info("USB power cycle after flash...")
+                usb_power.power_cycle()
 
         # Stage 1: Pre-ADB Setup (Blind AOA2 HID automation)
         if not skip_setup and self.device_config.get("build_type") == "user":
