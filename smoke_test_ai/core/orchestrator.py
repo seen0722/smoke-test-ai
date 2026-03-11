@@ -427,8 +427,9 @@ class Orchestrator:
                 )
 
         adb.shell("settings put global stay_on_while_plugged_in 3")
-        adb.shell("settings put system screen_off_timeout 1800000")
+        adb.shell("settings put system screen_off_timeout 2147483647")
         adb.shell("input keyevent KEYCODE_WAKEUP")
+        adb.shell("wm dismiss-keyguard")
 
         # Pre-test setup: install Mobly Snippet APK and clean previous test data
         self._pre_test_setup(adb, suite_config)

@@ -60,7 +60,10 @@ class CameraPlugin(TestPlugin):
             adb.shell(f"touch {marker}")
             time.sleep(0.5)
 
-            # 2. Launch camera in standalone mode
+            # 2. Dismiss any system dialogs and launch camera in standalone mode
+            adb.shell("input keyevent KEYCODE_WAKEUP")
+            adb.shell("wm dismiss-keyguard")
+            adb.shell("am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS")
             adb.shell("am force-stop org.codeaurora.snapcam 2>/dev/null; "
                        "am force-stop com.android.camera2 2>/dev/null")
             camera_id = 0 if camera == "back" else 1

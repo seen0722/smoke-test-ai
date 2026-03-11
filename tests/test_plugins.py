@@ -59,6 +59,9 @@ class TestCameraPlugin:
         adb.shell.side_effect = [
             ok,                                                     # mkdir -p
             ok,                                                     # touch marker
+            ok,                                                     # KEYCODE_WAKEUP
+            ok,                                                     # wm dismiss-keyguard
+            ok,                                                     # CLOSE_SYSTEM_DIALOGS
             ok,                                                     # force-stop
             MagicMock(stdout="Starting: Intent\n", returncode=0),  # am start
             ok,                                                     # KEYCODE_CAMERA
@@ -86,6 +89,9 @@ class TestCameraPlugin:
         adb.shell.side_effect = [
             ok,                                                     # mkdir -p
             ok,                                                     # touch marker
+            ok,                                                     # KEYCODE_WAKEUP
+            ok,                                                     # wm dismiss-keyguard
+            ok,                                                     # CLOSE_SYSTEM_DIALOGS
             ok,                                                     # force-stop
             MagicMock(stdout="Starting: Intent\n", returncode=0),  # am start
             ok,                                                     # KEYCODE_CAMERA
@@ -137,6 +143,9 @@ class TestCameraPlugin:
             MagicMock(stdout="Number of camera devices: 2\n", returncode=0),  # dumpsys
             ok,                                                     # mkdir -p
             ok,                                                     # touch marker
+            ok,                                                     # KEYCODE_WAKEUP
+            ok,                                                     # wm dismiss-keyguard
+            ok,                                                     # CLOSE_SYSTEM_DIALOGS
             ok,                                                     # force-stop
             MagicMock(stdout="Starting: Intent\n", returncode=0),  # am start
             ok,                                                     # KEYCODE_CAMERA
@@ -163,6 +172,9 @@ class TestCameraPlugin:
         return [
             ok,                                                     # mkdir -p
             ok,                                                     # touch marker
+            ok,                                                     # KEYCODE_WAKEUP
+            ok,                                                     # wm dismiss-keyguard
+            ok,                                                     # CLOSE_SYSTEM_DIALOGS
             ok,                                                     # force-stop
             MagicMock(stdout="Starting: Intent\n", returncode=0),  # am start
             ok,                                                     # KEYCODE_CAMERA
