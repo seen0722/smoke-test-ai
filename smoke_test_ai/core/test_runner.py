@@ -96,6 +96,7 @@ class TestRunner:
                         snippet=getattr(self, '_snippet', None),
                         peer_snippet=getattr(self, '_peer_snippet', None),
                         visual_analyzer=self.visual_analyzer,
+                        usb_power=getattr(self, '_usb_power', None),
                     )
                     result = self._plugins[test_type].execute(test_case, ctx)
                 else:

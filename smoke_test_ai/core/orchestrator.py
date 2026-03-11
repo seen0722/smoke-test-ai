@@ -472,6 +472,7 @@ class Orchestrator:
             runner._snippet = snippet
             runner._peer_snippet = peer_snippet
             runner._settings = self.settings
+            runner._usb_power = usb_power
 
             results = runner.run_suite(suite_config)
             if webcam_capture:
