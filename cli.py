@@ -80,7 +80,8 @@ def test(suite, serial, config_dir):
 @click.option("--serial", required=True, help="Device serial number")
 @click.option("--config-dir", default="config", help="Config directory path")
 @click.option("--boot-timeout", default=180, help="Max seconds to wait for boot after reset")
-def reset_test(device, suite, serial, config_dir, boot_timeout):
+@click.option("--reset-delay", default=None, type=int, help="Seconds to wait after factory reset before USB power cycle (default: from YAML or 10)")
+def reset_test(device, suite, serial, config_dir, boot_timeout, reset_delay):
     """Factory reset → bootstrap → full smoke test."""
     from smoke_test_ai.core.orchestrator import Orchestrator
     from smoke_test_ai.drivers.adb_controller import AdbController
@@ -112,6 +113,10 @@ def reset_test(device, suite, serial, config_dir, boot_timeout):
             port=usb_power_cfg["port"],
             off_duration=usb_power_cfg.get("off_duration", 3.0),
         )
+        delay = reset_delay or usb_power_cfg.get("reset_delay", 10)
+        console.print(f"[cyan]Waiting {delay}s for device shutdown before USB power cycle...[/]")
+        import time
+        time.sleep(delay)
         console.print("[cyan]USB power cycle to prevent offline charging...[/]")
         usb_power.power_cycle()
     else:
