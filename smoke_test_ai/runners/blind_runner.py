@@ -9,11 +9,12 @@ logger = get_logger(__name__)
 class BlindRunner:
     """Execute a YAML-defined action sequence via AOA2 HID (blind, no vision)."""
 
-    def __init__(self, hid, adb, aoa_config: dict, flow_config: dict):
+    def __init__(self, hid, adb, aoa_config: dict, flow_config: dict, usb_power=None):
         self.hid = hid
         self.adb = adb
         self.aoa_config = aoa_config
         self.flow_config = flow_config
+        self.usb_power = usb_power
 
         res = flow_config.get("screen_resolution", [1080, 2400])
         self.screen_w = res[0]
@@ -50,6 +51,7 @@ class BlindRunner:
             "back": self._do_back,
             "sleep": self._do_sleep,
             "wait_for_adb": self._do_wait_for_adb,
+            "power_cycle": self._do_power_cycle,
         }.get(action)
 
         if handler is None:
@@ -67,7 +69,7 @@ class BlindRunner:
             else:
                 return False
 
-        if action not in ("sleep", "wait_for_adb"):
+        if action not in ("sleep", "wait_for_adb", "power_cycle"):
             time.sleep(delay)
 
         return result
@@ -121,6 +123,13 @@ class BlindRunner:
     def _do_sleep(self, step: dict) -> bool:
         time.sleep(step.get("duration", 1.0))
         return True
+
+    def _do_power_cycle(self, step: dict) -> bool:
+        if self.usb_power is None:
+            logger.warning("power_cycle action skipped: usb_power not configured")
+            return True
+        duration = step.get("off_duration")
+        return self.usb_power.power_cycle(off_duration=duration)
 
     def _reconnect_aoa(self) -> bool:
         """Re-establish AOA connection after USB disconnection."""
@@ -177,6 +186,9 @@ class BlindRunner:
             time.sleep(1)
 
         if not found_mode:
+            if self.usb_power:
+                logger.info("USB detection timeout — trying power cycle...")
+                self.usb_power.power_cycle()
             logger.error(f"Device not found after USB re-enumeration (timeout={timeout}s)")
             return False
 

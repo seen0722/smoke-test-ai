@@ -341,6 +341,57 @@ class TestBlindRunnerAdbFallback:
         adb.is_connected.assert_called_with(allow_unauthorized=True)
 
 
+class TestBlindRunnerPowerCycle:
+    @patch("smoke_test_ai.runners.blind_runner.time.sleep")
+    def test_power_cycle_action(self, mock_sleep):
+        """power_cycle action in setup flow triggers usb_power.power_cycle()."""
+        runner, hid, adb = _make_runner([
+            {"action": "power_cycle", "delay": 1.0, "description": "USB power reset"},
+        ])
+        mock_power = MagicMock()
+        mock_power.power_cycle.return_value = True
+        runner.usb_power = mock_power
+
+        result = runner.run()
+
+        assert result is True
+        mock_power.power_cycle.assert_called_once()
+
+    @patch("smoke_test_ai.runners.blind_runner.time.sleep")
+    def test_power_cycle_action_no_controller(self, mock_sleep):
+        """power_cycle action without usb_power configured -> skip, return True."""
+        runner, hid, adb = _make_runner([
+            {"action": "power_cycle", "delay": 1.0},
+        ])
+        # usb_power is None by default from _make_runner
+
+        result = runner.run()
+
+        assert result is True
+
+    @patch("smoke_test_ai.runners.blind_runner.usb.core.find")
+    @patch("smoke_test_ai.runners.blind_runner.time.sleep")
+    @patch("smoke_test_ai.runners.blind_runner.time.time")
+    def test_wait_for_adb_power_cycle_on_timeout(self, mock_time, mock_sleep, mock_usb_find):
+        """USB detection timeout triggers power_cycle before returning False."""
+        runner, hid, adb = _make_runner([
+            {"action": "wait_for_adb", "timeout": 5},
+        ])
+        mock_power = MagicMock()
+        mock_power.power_cycle.return_value = True
+        runner.usb_power = mock_power
+
+        # Simulate time passing beyond timeout — no device found
+        mock_time.side_effect = [0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        mock_usb_find.return_value = []
+        adb.is_connected.return_value = False
+
+        result = runner.run()
+
+        assert result is False
+        mock_power.power_cycle.assert_called_once()
+
+
 class TestStepRecorderOutput:
     def test_save_generates_valid_yaml(self, tmp_path):
         """StepRecorder._save() outputs valid YAML with correct structure."""
