@@ -38,7 +38,7 @@ device:
   usb_power:
     hub_location: "1-1"
     port: 1
-    off_duration: 3.0
+    off_duration: 20.0
     reset_delay: 3               # 秒，factory reset 後等待裝置關機再斷電
 
   setup_wizard:
