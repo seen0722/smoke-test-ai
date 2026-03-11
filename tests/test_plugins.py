@@ -1146,3 +1146,69 @@ class TestNetworkPlugin:
         result = net_plugin.execute(tc, plugin_context)
         assert result.status == TestStatus.ERROR
         assert "Unknown" in result.message
+
+
+class TestChargingPlugin:
+    @pytest.fixture
+    def charging_plugin(self):
+        from smoke_test_ai.plugins.charging import ChargingPlugin
+        return ChargingPlugin()
+
+    def test_charging_detect_pass(self, charging_plugin):
+        """Full flow: initial charging -> power off -> power on -> still charging."""
+        adb = MagicMock()
+        usb_power = MagicMock()
+        usb_power.power_off.return_value = True
+        usb_power.power_on.return_value = True
+        adb.shell.side_effect = [
+            MagicMock(stdout="  AC powered: false\n  USB powered: true\n  status: 2\n"),  # initial
+            MagicMock(stdout="  AC powered: false\n  USB powered: true\n  status: 2\n"),  # after recovery
+        ]
+        adb.wait_for_device.return_value = True
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={}, usb_power=usb_power)
+        tc = {"id": "chg1", "name": "Charging", "type": "charging", "action": "detect",
+              "params": {"off_duration": 1, "settle_time": 0}}
+        with patch("smoke_test_ai.plugins.charging.time.sleep"):
+            result = charging_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        usb_power.power_off.assert_called_once()
+        usb_power.power_on.assert_called_once()
+
+    def test_charging_detect_no_usb_power(self, charging_plugin):
+        """No usb_power controller -> SKIP."""
+        adb = MagicMock()
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={}, usb_power=None)
+        tc = {"id": "chg2", "name": "Charging", "type": "charging", "action": "detect", "params": {}}
+        result = charging_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.SKIP
+
+    def test_charging_detect_initial_not_charging(self, charging_plugin):
+        """Initial state not charging -> FAIL."""
+        adb = MagicMock()
+        usb_power = MagicMock()
+        adb.shell.return_value = MagicMock(
+            stdout="  AC powered: false\n  USB powered: false\n  status: 3\n"
+        )
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={}, usb_power=usb_power)
+        tc = {"id": "chg3", "name": "Charging", "type": "charging", "action": "detect", "params": {}}
+        result = charging_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+        assert "not charging" in result.message.lower() or "初始" in result.message
+
+    def test_charging_detect_not_recovered(self, charging_plugin):
+        """Power on but charging not recovered -> FAIL."""
+        adb = MagicMock()
+        usb_power = MagicMock()
+        usb_power.power_off.return_value = True
+        usb_power.power_on.return_value = True
+        adb.shell.side_effect = [
+            MagicMock(stdout="  AC powered: false\n  USB powered: true\n  status: 2\n"),  # initial OK
+            MagicMock(stdout="  AC powered: false\n  USB powered: false\n  status: 3\n"),  # not recovered
+        ]
+        adb.wait_for_device.return_value = True
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={}, usb_power=usb_power)
+        tc = {"id": "chg4", "name": "Charging", "type": "charging", "action": "detect",
+              "params": {"off_duration": 1, "settle_time": 0}}
+        with patch("smoke_test_ai.plugins.charging.time.sleep"):
+            result = charging_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
