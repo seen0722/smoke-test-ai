@@ -124,9 +124,30 @@ def test_enable_wifi_needs_enabling(mock_run, mock_sleep, adb):
 
 @patch("smoke_test_ai.drivers.adb_controller.time.sleep")
 @patch("smoke_test_ai.drivers.adb_controller.subprocess.run")
-def test_connect_wifi_enables_first(mock_run, mock_sleep, adb):
-    """Verify connect_wifi calls enable_wifi before connecting."""
+def test_wait_wifi_subsystem_ready(mock_run, mock_sleep, adb):
+    """_wait_wifi_subsystem returns True when WifiService reports status."""
     mock_run.side_effect = [
+        MagicMock(returncode=0, stdout="", stderr=""),  # not ready yet
+        MagicMock(returncode=0, stdout="Wi-Fi is disabled\n", stderr=""),  # ready
+    ]
+    assert adb._wait_wifi_subsystem(timeout=10) is True
+
+
+@patch("smoke_test_ai.drivers.adb_controller.time.sleep")
+@patch("smoke_test_ai.drivers.adb_controller.subprocess.run")
+def test_wait_wifi_subsystem_timeout(mock_run, mock_sleep, adb):
+    """_wait_wifi_subsystem returns False on timeout."""
+    mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    assert adb._wait_wifi_subsystem(timeout=0) is False
+
+
+@patch("smoke_test_ai.drivers.adb_controller.time.sleep")
+@patch("smoke_test_ai.drivers.adb_controller.subprocess.run")
+def test_connect_wifi_enables_first(mock_run, mock_sleep, adb):
+    """Verify connect_wifi waits for subsystem, enables, then connects."""
+    mock_run.side_effect = [
+        # _wait_wifi_subsystem: check → ready
+        MagicMock(returncode=0, stdout="Wi-Fi is disabled\n", stderr=""),
         # enable_wifi: check → already enabled
         MagicMock(returncode=0, stdout="Wi-Fi is enabled\n", stderr=""),
         # connect-network command

@@ -412,8 +412,9 @@ class Orchestrator:
                     "will not start until user storage is unlocked."
                 )
 
-        # WiFi connection
+        # WiFi connection (longer timeout after factory reset / setup wizard)
         wifi_cfg = self.settings.get("wifi", {})
+        wifi_timeout = 45 if not skip_setup else 15
         if wifi_cfg.get("ssid"):
             if adb.is_wifi_connected():
                 logger.info("WiFi already connected, skipping")
@@ -422,6 +423,7 @@ class Orchestrator:
                     wifi_cfg["ssid"],
                     wifi_cfg.get("password", ""),
                     security=wifi_cfg.get("security", "wpa2"),
+                    wifi_timeout=wifi_timeout,
                 )
 
         adb.shell("settings put global stay_on_while_plugged_in 3")

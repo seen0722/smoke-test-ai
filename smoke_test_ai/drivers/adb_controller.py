@@ -91,6 +91,19 @@ class AdbController:
         """Pull a file from device to local filesystem."""
         return self._run("pull", remote_path, local_path, timeout=30)
 
+    def _wait_wifi_subsystem(self, timeout: int = 30) -> bool:
+        """Wait for WiFi subsystem (WifiService) to be ready after boot/reset."""
+        logger.info("Waiting for WiFi subsystem to be ready...")
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            result = self.shell("dumpsys wifi | grep 'Wi-Fi is'")
+            if "Wi-Fi is" in result.stdout:
+                logger.info("WiFi subsystem is ready")
+                return True
+            time.sleep(2)
+        logger.warning("Timeout waiting for WiFi subsystem")
+        return False
+
     def enable_wifi(self, timeout: int = 15) -> bool:
         """Enable WiFi and wait until it's ready. Returns True if enabled."""
         result = self.shell("dumpsys wifi | grep 'Wi-Fi is'")
@@ -109,10 +122,13 @@ class AdbController:
         logger.warning("Timeout waiting for WiFi to enable")
         return False
 
-    def connect_wifi(self, ssid: str, password: str, security: str = "wpa2", retries: int = 3) -> bool:
+    def connect_wifi(self, ssid: str, password: str, security: str = "wpa2",
+                     retries: int = 3, wifi_timeout: int = 15) -> bool:
         """Enable WiFi, connect to network, and verify connection. Returns True if connected."""
-        # Ensure WiFi is enabled first (critical after factory reset)
-        if not self.enable_wifi():
+        # Wait for WiFi subsystem to be ready (critical after factory reset)
+        self._wait_wifi_subsystem(timeout=wifi_timeout)
+        # Ensure WiFi is enabled
+        if not self.enable_wifi(timeout=wifi_timeout):
             logger.error("Cannot connect WiFi: failed to enable WiFi adapter")
             return False
 
