@@ -147,6 +147,17 @@ test_suite:
       command: "dumpsys battery | grep 'powered'"
       expected_pattern: ".*powered: true"
 
+    - id: "charging_detection"
+      name: "充電偵測測試"
+      type: "charging"
+      action: "detect"
+      params:
+        off_duration: 5
+        settle_time: 5
+      depends_on: "charging_connected"
+      requires:
+        device_capability: "usb_power"
+
     # --- 系統穩定性 ---
     - id: "no_system_crash"
       name: "無系統崩潰"

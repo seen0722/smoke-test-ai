@@ -5,6 +5,7 @@ from smoke_test_ai.plugins.wifi import WifiPlugin
 from smoke_test_ai.plugins.bluetooth import BluetoothPlugin
 from smoke_test_ai.plugins.audio import AudioPlugin
 from smoke_test_ai.plugins.network import NetworkPlugin
+from smoke_test_ai.plugins.charging import ChargingPlugin
 
 __all__ = [
     "TestPlugin",
@@ -15,4 +16,5 @@ __all__ = [
     "BluetoothPlugin",
     "AudioPlugin",
     "NetworkPlugin",
+    "ChargingPlugin",
 ]
