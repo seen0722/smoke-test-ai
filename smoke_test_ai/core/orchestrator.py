@@ -375,7 +375,7 @@ class Orchestrator:
 
                         hid = self._init_aoa_hid(aoa_cfg)
                         flow = yaml.safe_load(flow_path.read_text())
-                        runner = BlindRunner(hid=hid, adb=adb, aoa_config=aoa_cfg, flow_config=flow)
+                        runner = BlindRunner(hid=hid, adb=adb, aoa_config=aoa_cfg, flow_config=flow, usb_power=usb_power)
                         if runner.run():
                             logger.info("Blind setup flow completed successfully")
                         else:

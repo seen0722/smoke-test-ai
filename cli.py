@@ -103,11 +103,22 @@ def reset_test(device, suite, serial, config_dir, boot_timeout):
     adb.factory_reset()
     console.print("Factory reset initiated.")
 
-    # Prompt user to unplug USB to avoid offline charging mode
-    console.print("\n[bold cyan]>>> Please UNPLUG the USB cable now <<<[/]")
-    console.print("Wait for the device to fully boot into the home screen,")
-    console.print("then plug the USB cable back in.")
-    click.pause("Press any key after USB is reconnected...")
+    # USB power cycle to avoid offline charging mode
+    usb_power_cfg = device_config.get("device", {}).get("usb_power")
+    if usb_power_cfg:
+        from smoke_test_ai.drivers.usb_power import UsbPowerController
+        usb_power = UsbPowerController(
+            hub_location=usb_power_cfg["hub_location"],
+            port=usb_power_cfg["port"],
+            off_duration=usb_power_cfg.get("off_duration", 3.0),
+        )
+        console.print("[cyan]USB power cycle to prevent offline charging...[/]")
+        usb_power.power_cycle()
+    else:
+        console.print("\n[bold cyan]>>> Please UNPLUG the USB cable now <<<[/]")
+        console.print("Wait for the device to fully boot into the home screen,")
+        console.print("then plug the USB cable back in.")
+        click.pause("Press any key after USB is reconnected...")
 
     # Wait for device to come back via ADB
     console.print(f"\nWaiting for ADB connection (timeout: {boot_timeout}s)...")
