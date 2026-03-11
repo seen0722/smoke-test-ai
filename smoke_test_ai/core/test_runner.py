@@ -59,6 +59,11 @@ class TestRunner:
             completed[test_case["id"]] = result.status
             status_icon = "PASS" if result.passed else result.status.value
             logger.info(f"  [{status_icon}] {result.name}: {result.message}")
+
+            # USB power cycle kills Mobly snippet — reconnect after charging tests
+            if test_case.get("type") == "charging" and result.passed:
+                self._reconnect_snippet()
+
         return results
 
     def run_test(self, test_case: dict) -> TestResult:
@@ -113,6 +118,29 @@ class TestRunner:
 
         result.duration = time.time() - start_time
         return result
+
+    def _reconnect_snippet(self):
+        """Reconnect Mobly snippet after USB power cycle."""
+        old_dut = getattr(self, '_mobly_dut', None)
+        if not old_dut:
+            return
+        try:
+            # Tear down old device gracefully
+            try:
+                old_dut.stop_services()
+            except Exception:
+                pass
+
+            # Create fresh AndroidDevice and reload snippet
+            from mobly.controllers.android_device import AndroidDevice
+            serial = old_dut.serial
+            new_dut = AndroidDevice(serial)
+            new_dut.load_snippet('mbs', 'com.google.android.mobly.snippet.bundled')
+            self._mobly_dut = new_dut
+            self._snippet = new_dut.mbs
+            logger.info("Mobly snippet reconnected after USB power cycle")
+        except Exception as e:
+            logger.warning(f"Failed to reconnect Mobly snippet: {e}")
 
     def _run_adb_check(self, tc: dict) -> TestResult:
         proc = self.adb.shell(tc["command"])
