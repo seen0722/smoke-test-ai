@@ -266,6 +266,23 @@ class Orchestrator:
                    "pm grant org.codeaurora.snapcam android.permission.ACCESS_FINE_LOCATION 2>/dev/null")
         logger.info("Pre-test cleanup complete")
 
+    @staticmethod
+    def _resolve_flash_config(flash_config: dict, build_dir: str) -> dict:
+        """Resolve ${BUILD_DIR} placeholders in flash config."""
+        import copy
+        config = copy.deepcopy(flash_config)
+
+        def _substitute(obj):
+            if isinstance(obj, str):
+                return obj.replace("${BUILD_DIR}", build_dir)
+            if isinstance(obj, dict):
+                return {k: _substitute(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [_substitute(v) for v in obj]
+            return obj
+
+        return _substitute(config)
+
     def _resolve_variables(self, suite_config: dict) -> dict:
         """Resolve ${VAR} placeholders in test suite config."""
         var_map = {
@@ -354,7 +371,9 @@ class Orchestrator:
         if not skip_flash and build_dir:
             logger.info("=== Stage 0: Flash Image ===")
             flash_driver = self._get_flash_driver(serial=serial)
-            flash_config = self.device_config["flash"]
+            flash_config = self._resolve_flash_config(
+                self.device_config["flash"], build_dir
+            )
             flash_driver.flash(flash_config)
             logger.info("Flash complete. Waiting for device boot...")
             time.sleep(10)
