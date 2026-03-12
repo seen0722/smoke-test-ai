@@ -1,4 +1,6 @@
 import pytest
+import tempfile
+import os
 from unittest.mock import patch, MagicMock
 from smoke_test_ai.drivers.flash.base import FlashDriver
 from smoke_test_ai.drivers.flash.fastboot import FastbootFlashDriver
@@ -37,37 +39,10 @@ class TestFastbootFlashDriver:
             "images": [{"partition": "boot", "file": "/path/boot.img"}],
         }
         driver.flash(config)
-        # pre_flash (via _run) + flash partition
         assert mock_run.call_count >= 2
         first_call = mock_run.call_args_list[0]
         cmd = first_call[0][0] if first_call[0] else first_call[1].get("args", [])
         assert "oem" in cmd or "oem" in str(first_call)
-
-    @patch("smoke_test_ai.drivers.flash.fastboot.os.path.isfile", return_value=True)
-    @patch("smoke_test_ai.drivers.flash.fastboot.subprocess.run")
-    def test_flash_script_mode(self, mock_run, mock_isfile):
-        mock_run.return_value = MagicMock(returncode=0, stdout="Flashing...\nDone", stderr="")
-        driver = FastbootFlashDriver(serial="FAKE")
-        config = {"script": "/path/to/fastboot.bash", "script_timeout": 300}
-        driver.flash(config)
-        # script run via subprocess
-        mock_run.assert_called_once()
-        call_args = mock_run.call_args
-        assert call_args[0][0] == ["bash", "/path/to/fastboot.bash"]
-        assert call_args[1]["env"]["ANDROID_SERIAL"] == "FAKE"
-
-    @patch("smoke_test_ai.drivers.flash.fastboot.os.path.isfile", return_value=True)
-    @patch("smoke_test_ai.drivers.flash.fastboot.subprocess.run")
-    def test_flash_script_with_pre_flash(self, mock_run, mock_isfile):
-        mock_run.return_value = MagicMock(returncode=0, stdout="OK", stderr="")
-        driver = FastbootFlashDriver(serial="FAKE")
-        config = {
-            "pre_flash": ["fastboot oem unlock Trimble-Thorpe"],
-            "script": "/path/to/fastboot.bash",
-        }
-        driver.flash(config)
-        # pre_flash + script = 2 calls
-        assert mock_run.call_count == 2
 
     @patch("smoke_test_ai.drivers.flash.fastboot.os.path.isfile", return_value=False)
     def test_flash_script_not_found(self, mock_isfile):
@@ -76,14 +51,166 @@ class TestFastbootFlashDriver:
         with pytest.raises(FileNotFoundError, match="Flash script not found"):
             driver.flash(config)
 
-    @patch("smoke_test_ai.drivers.flash.fastboot.os.path.isfile", return_value=True)
+
+class TestParseScript:
+    def _write_script(self, content: str) -> str:
+        f = tempfile.NamedTemporaryFile(mode="w", suffix=".bash", delete=False)
+        f.write(content)
+        f.close()
+        return f.name
+
+    def test_parse_fastboot_tool_var(self):
+        script = self._write_script(
+            'fastboot_tool="sudo ./fastboot"\n'
+            'image_dir="./"\n'
+            '$fastboot_tool erase boot_a\n'
+            '$fastboot_tool flash boot_a ${image_dir}boot.img\n'
+        )
+        try:
+            cmds = FastbootFlashDriver._parse_script(script)
+            assert len(cmds) == 2
+            assert cmds[0] == ["erase", "boot_a"]
+            assert cmds[1] == ["flash", "boot_a", "${image_dir}boot.img"]
+        finally:
+            os.unlink(script)
+
+    def test_parse_skips_comments(self):
+        script = self._write_script(
+            '$fastboot_tool flash boot_a boot.img\n'
+            '#$fastboot_tool erase persist\n'
+            '#$fastboot_tool flash persist persist.img\n'
+            '$fastboot_tool set_active a\n'
+        )
+        try:
+            cmds = FastbootFlashDriver._parse_script(script)
+            assert len(cmds) == 2
+            assert cmds[0] == ["flash", "boot_a", "boot.img"]
+            assert cmds[1] == ["set_active", "a"]
+        finally:
+            os.unlink(script)
+
+    def test_parse_sudo_fastboot(self):
+        script = self._write_script(
+            'sudo ./fastboot flash system system.img\n'
+            './fastboot reboot\n'
+        )
+        try:
+            cmds = FastbootFlashDriver._parse_script(script)
+            assert len(cmds) == 2
+            assert cmds[0] == ["flash", "system", "system.img"]
+            assert cmds[1] == ["reboot"]
+        finally:
+            os.unlink(script)
+
+    def test_parse_skips_non_fastboot_lines(self):
+        script = self._write_script(
+            'fastboot_tool="sudo ./fastboot"\n'
+            'image_dir="./"\n'
+            'case $1 in\n'
+            '  *)\n'
+            '    $fastboot_tool flash boot_a boot.img\n'
+            'esac\n'
+        )
+        try:
+            cmds = FastbootFlashDriver._parse_script(script)
+            assert len(cmds) == 1
+            assert cmds[0] == ["flash", "boot_a", "boot.img"]
+        finally:
+            os.unlink(script)
+
+    def test_parse_real_t70_style(self):
+        """Simulate T70 fastboot.bash structure."""
+        script = self._write_script(
+            'fastboot_tool="sudo ./fastboot"\n'
+            'image_dir="./"\n'
+            '\n'
+            'case $1 in\n'
+            '\t*)\n'
+            '\t\t$fastboot_tool erase userdata\n'
+            '\t\t$fastboot_tool flash userdata ${image_dir}userdata.img\n'
+            '\t\t$fastboot_tool erase super\n'
+            '\t\t$fastboot_tool flash super ${image_dir}super.img\n'
+            '\t\t$fastboot_tool erase boot_a\n'
+            '\t\t$fastboot_tool erase boot_b\n'
+            '\t\t$fastboot_tool flash boot_a ${image_dir}boot.img\n'
+            '\t\t$fastboot_tool flash boot_b ${image_dir}boot.img\n'
+            '\t\t#$fastboot_tool erase persist\n'
+            '\t\t#$fastboot_tool flash persist ${image_dir}persist.img\n'
+            '\t\t$fastboot_tool set_active a\n'
+            '\t\t#$fastboot_tool reboot\n'
+            'esac\n'
+        )
+        try:
+            cmds = FastbootFlashDriver._parse_script(script)
+            # 9 active commands (2 commented out for persist, 1 for reboot)
+            assert len(cmds) == 9
+            assert cmds[0] == ["erase", "userdata"]
+            assert cmds[1] == ["flash", "userdata", "${image_dir}userdata.img"]
+            assert cmds[-1] == ["set_active", "a"]
+        finally:
+            os.unlink(script)
+
+
+class TestRunScript:
     @patch("smoke_test_ai.drivers.flash.fastboot.subprocess.run")
-    def test_flash_script_failure(self, mock_run, mock_isfile):
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="FAILED: write error")
-        driver = FastbootFlashDriver(serial="FAKE")
-        config = {"script": "/path/to/fastboot.bash"}
-        with pytest.raises(RuntimeError, match="Flash script failed"):
+    def test_run_script_uses_system_fastboot(self, mock_run):
+        """Script mode parses script and uses system fastboot."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="OK", stderr="")
+        driver = FastbootFlashDriver(serial="FAKE", fastboot_path="/usr/bin/fastboot")
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".bash", delete=False) as f:
+            f.write('$fastboot_tool erase boot_a\n')
+            f.write('$fastboot_tool flash boot_a ${image_dir}boot.img\n')
+            script_path = f.name
+
+        try:
+            config = {"script": script_path}
             driver.flash(config)
+            assert mock_run.call_count == 2
+            # First call: erase boot_a
+            first_cmd = mock_run.call_args_list[0][0][0]
+            assert first_cmd[0] == "/usr/bin/fastboot"
+            assert "-s" in first_cmd and "FAKE" in first_cmd
+            assert "erase" in first_cmd
+        finally:
+            os.unlink(script_path)
+
+    @patch("smoke_test_ai.drivers.flash.fastboot.subprocess.run")
+    def test_run_script_with_pre_flash(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="OK", stderr="")
+        driver = FastbootFlashDriver(serial="FAKE")
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".bash", delete=False) as f:
+            f.write('$fastboot_tool flash boot_a boot.img\n')
+            script_path = f.name
+
+        try:
+            config = {
+                "pre_flash": ["fastboot oem unlock Trimble-Thorpe"],
+                "script": script_path,
+            }
+            driver.flash(config)
+            # pre_flash (1) + parsed script command (1) = 2
+            assert mock_run.call_count == 2
+        finally:
+            os.unlink(script_path)
+
+    @patch("smoke_test_ai.drivers.flash.fastboot.subprocess.run")
+    def test_run_script_failure_raises(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="FAILED: write")
+        driver = FastbootFlashDriver(serial="FAKE")
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".bash", delete=False) as f:
+            f.write('$fastboot_tool flash boot_a boot.img\n')
+            script_path = f.name
+
+        try:
+            config = {"script": script_path}
+            with pytest.raises(RuntimeError, match="Flash command failed"):
+                driver.flash(config)
+        finally:
+            os.unlink(script_path)
+
 
 class TestCustomFlashDriver:
     @patch("smoke_test_ai.drivers.flash.custom.subprocess.run")

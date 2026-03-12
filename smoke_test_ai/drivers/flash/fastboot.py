@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 from smoke_test_ai.drivers.flash.base import FlashDriver
 from smoke_test_ai.utils.logger import get_logger
@@ -27,7 +28,7 @@ class FastbootFlashDriver(FlashDriver):
             if hasattr(result, 'returncode') and result.returncode != 0:
                 logger.warning(f"Pre-flash command returned {result.returncode}: {getattr(result, 'stderr', '')}")
 
-        # Script mode: run vendor flash script directly
+        # Script mode: parse vendor script and execute with system fastboot
         script = config.get("script")
         if script:
             self._run_script(script, config)
@@ -47,29 +48,57 @@ class FastbootFlashDriver(FlashDriver):
             subprocess.run(post_cmd.split(), capture_output=True, text=True, timeout=60)
 
     def _run_script(self, script: str, config: dict) -> None:
+        """Parse vendor flash script and execute each fastboot command
+        using the system fastboot binary (cross-platform compatible)."""
         if not os.path.isfile(script):
             raise FileNotFoundError(f"Flash script not found: {script}")
 
         script_dir = os.path.dirname(os.path.abspath(script))
-        timeout = config.get("script_timeout", 600)
+        commands = self._parse_script(script)
 
-        logger.info(f"Running flash script: {script} (timeout={timeout}s)")
-        env = os.environ.copy()
-        if self.serial:
-            env["ANDROID_SERIAL"] = self.serial
+        logger.info(f"Parsed {len(commands)} fastboot commands from: {script}")
+        for i, cmd_args in enumerate(commands, 1):
+            # Resolve image paths relative to script directory
+            resolved = []
+            for arg in cmd_args:
+                if arg.startswith("${image_dir}"):
+                    resolved.append(os.path.join(script_dir, arg.replace("${image_dir}", "")))
+                elif not arg.startswith("-") and os.path.isfile(os.path.join(script_dir, arg)):
+                    resolved.append(os.path.join(script_dir, arg))
+                else:
+                    resolved.append(arg)
 
-        result = subprocess.run(
-            ["bash", script],
-            cwd=script_dir,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
+            logger.info(f"  [{i}/{len(commands)}] fastboot {' '.join(resolved)}")
+            result = self._run(*resolved)
+            if result.returncode != 0:
+                raise RuntimeError(
+                    f"Flash command failed [{i}/{len(commands)}]: "
+                    f"fastboot {' '.join(resolved)}\n{result.stderr}"
+                )
+
+        logger.info("Flash script execution complete")
+
+    @staticmethod
+    def _parse_script(script_path: str) -> list[list[str]]:
+        """Parse a vendor fastboot.bash script into a list of fastboot
+        command argument lists, skipping comments and non-fastboot lines."""
+        commands = []
+        # Match lines like: $fastboot_tool flash boot_a ${image_dir}boot.img
+        # or: sudo ./fastboot flash boot_a boot.img
+        fastboot_re = re.compile(
+            r'^\s*(?:\$fastboot_tool|(?:sudo\s+)?\.?/?fastboot)\s+(.+)$'
         )
-        if result.stdout:
-            for line in result.stdout.strip().split("\n")[-10:]:
-                logger.info(f"  {line}")
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"Flash script failed (exit {result.returncode}):\n{result.stderr[-500:]}"
-            )
+        with open(script_path) as f:
+            for line in f:
+                stripped = line.strip()
+                # Skip empty, comments, and commented-out lines
+                if not stripped or stripped.startswith("#"):
+                    continue
+                m = fastboot_re.match(stripped)
+                if m:
+                    args_str = m.group(1).strip()
+                    # Remove trailing comments
+                    args_str = args_str.split("#")[0].strip()
+                    if args_str:
+                        commands.append(args_str.split())
+        return commands
