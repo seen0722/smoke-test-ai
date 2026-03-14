@@ -212,6 +212,89 @@ class TestRunScript:
             os.unlink(script_path)
 
 
+class TestKeepDataFiltering:
+    @patch("smoke_test_ai.drivers.flash.fastboot.subprocess.run")
+    def test_keep_data_filters_userdata_script(self, mock_run):
+        """keep_data=True filters erase/flash userdata from script."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="OK", stderr="")
+        driver = FastbootFlashDriver(serial="FAKE")
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".bash", delete=False) as f:
+            f.write('$fastboot_tool erase userdata\n')
+            f.write('$fastboot_tool flash userdata ${image_dir}userdata.img\n')
+            f.write('$fastboot_tool flash super ${image_dir}super.img\n')
+            f.write('$fastboot_tool set_active a\n')
+            script_path = f.name
+        try:
+            driver.flash({"script": script_path, "keep_data": True})
+            assert mock_run.call_count == 2  # super + set_active only
+        finally:
+            os.unlink(script_path)
+
+    @patch("smoke_test_ai.drivers.flash.fastboot.subprocess.run")
+    def test_keep_data_filters_ab_slots(self, mock_run):
+        """keep_data=True filters userdata_a and userdata_b slots."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="OK", stderr="")
+        driver = FastbootFlashDriver(serial="FAKE")
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".bash", delete=False) as f:
+            f.write('$fastboot_tool erase userdata_a\n')
+            f.write('$fastboot_tool erase userdata_b\n')
+            f.write('$fastboot_tool flash boot_a ${image_dir}boot.img\n')
+            script_path = f.name
+        try:
+            driver.flash({"script": script_path, "keep_data": True})
+            assert mock_run.call_count == 1  # boot_a only
+        finally:
+            os.unlink(script_path)
+
+    @patch("smoke_test_ai.drivers.flash.fastboot.subprocess.run")
+    def test_keep_data_false_includes_all(self, mock_run):
+        """keep_data=False includes all commands."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="OK", stderr="")
+        driver = FastbootFlashDriver(serial="FAKE")
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".bash", delete=False) as f:
+            f.write('$fastboot_tool erase userdata\n')
+            f.write('$fastboot_tool flash userdata ${image_dir}userdata.img\n')
+            f.write('$fastboot_tool flash super ${image_dir}super.img\n')
+            script_path = f.name
+        try:
+            driver.flash({"script": script_path})
+            assert mock_run.call_count == 3
+        finally:
+            os.unlink(script_path)
+
+    @patch("smoke_test_ai.drivers.flash.fastboot.subprocess.run")
+    def test_keep_data_filters_images_mode(self, mock_run):
+        """keep_data=True filters userdata in images mode."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="OK", stderr="")
+        driver = FastbootFlashDriver(serial="FAKE")
+        config = {
+            "images": [
+                {"partition": "system", "file": "/p/system.img"},
+                {"partition": "userdata", "file": "/p/userdata.img"},
+                {"partition": "boot", "file": "/p/boot.img"},
+            ],
+            "keep_data": True,
+        }
+        driver.flash(config)
+        assert mock_run.call_count == 2  # system + boot
+
+    @patch("smoke_test_ai.drivers.flash.fastboot.subprocess.run")
+    def test_keep_data_filters_userdata_ab_images(self, mock_run):
+        """keep_data=True filters userdata_a/b in images mode."""
+        mock_run.return_value = MagicMock(returncode=0, stdout="OK", stderr="")
+        driver = FastbootFlashDriver(serial="FAKE")
+        config = {
+            "images": [
+                {"partition": "system", "file": "/p/system.img"},
+                {"partition": "userdata_a", "file": "/p/ud_a.img"},
+                {"partition": "userdata_b", "file": "/p/ud_b.img"},
+            ],
+            "keep_data": True,
+        }
+        driver.flash(config)
+        assert mock_run.call_count == 1  # system only
+
+
 class TestCustomFlashDriver:
     @patch("smoke_test_ai.drivers.flash.custom.subprocess.run")
     def test_custom_commands(self, mock_run):

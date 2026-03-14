@@ -300,7 +300,7 @@ class TestOrchestratorRun:
              patch("smoke_test_ai.runners.blind_runner.BlindRunner", return_value=mock_blind_runner) as MockBlindRunner, \
              patch.object(orch, "_generate_reports"), \
              patch.object(orch, "_pre_test_setup"):
-            orch.run(serial="FAKE", config_dir=str(tmp_path))
+            orch.run(serial="FAKE", config_dir=str(tmp_path), is_factory_reset=True)
             mock_init_hid.assert_called_once()
             MockBlindRunner.assert_called_once()
             mock_hid.close.assert_called_once()
@@ -353,5 +353,123 @@ class TestOrchestratorRun:
 
         with patch.object(orch, "_generate_reports"), \
              patch.object(orch, "_pre_test_setup"):
-            orch.run(serial="FAKE")
+            orch.run(serial="FAKE", is_factory_reset=True)
             mock_adb_inst.unlock_keyguard.assert_called_once_with(pin="0000")
+
+
+class TestAdaptivePipeline:
+    """Tests for build_type / keep_data / is_factory_reset decision logic."""
+
+    def _setup_orch(self, settings, device_config, MockAdb, with_aoa=True):
+        if with_aoa:
+            device_config["device"]["aoa"] = {"enabled": True, "vendor_id": 0x18D1, "product_id": 0x4EE2}
+        orch = Orchestrator(settings=settings, device_config=device_config)
+        mock_adb = MagicMock()
+        mock_adb.wait_for_device.return_value = True
+        mock_adb.is_wifi_connected.return_value = True
+        mock_adb.get_user_state.return_value = "RUNNING_UNLOCKED"
+        mock_adb.get_device_info.return_value = {"model": "T", "sdk": "33"}
+        MockAdb.return_value = mock_adb
+        return orch, mock_adb
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_user_full_flash_triggers_aoa(self, MockAdb, mock_sleep, settings, device_config):
+        """user build + full flash → need_aoa=True."""
+        orch, mock_adb = self._setup_orch(settings, device_config, MockAdb)
+        with patch.object(orch, "_get_flash_driver") as mock_gfd, \
+             patch.object(orch, "_init_aoa_hid") as mock_aoa, \
+             patch.object(orch, "_generate_reports"), \
+             patch.object(orch, "_pre_test_setup"):
+            mock_gfd.return_value = MagicMock()
+            orch.run(serial="S", build_dir="/b", build_type="user", keep_data=False)
+            mock_aoa.assert_called_once()
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_user_keep_data_skips_aoa(self, MockAdb, mock_sleep, settings, device_config):
+        """user build + keep_data=True → no AOA."""
+        orch, mock_adb = self._setup_orch(settings, device_config, MockAdb)
+        with patch.object(orch, "_get_flash_driver") as mock_gfd, \
+             patch.object(orch, "_init_aoa_hid") as mock_aoa, \
+             patch.object(orch, "_generate_reports"), \
+             patch.object(orch, "_pre_test_setup"):
+            mock_gfd.return_value = MagicMock()
+            orch.run(serial="S", build_dir="/b", build_type="user", keep_data=True)
+            mock_aoa.assert_not_called()
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_userdebug_never_aoa(self, MockAdb, mock_sleep, settings, device_config):
+        """userdebug build → no AOA."""
+        orch, mock_adb = self._setup_orch(settings, device_config, MockAdb)
+        with patch.object(orch, "_get_flash_driver") as mock_gfd, \
+             patch.object(orch, "_init_aoa_hid") as mock_aoa, \
+             patch.object(orch, "_generate_reports"), \
+             patch.object(orch, "_pre_test_setup"):
+            mock_gfd.return_value = MagicMock()
+            orch.run(serial="S", build_dir="/b", build_type="userdebug")
+            mock_aoa.assert_not_called()
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_keep_data_injected_to_flash_config(self, MockAdb, mock_sleep, settings, device_config):
+        """keep_data=True is injected into flash_config."""
+        orch, mock_adb = self._setup_orch(settings, device_config, MockAdb, with_aoa=False)
+        mock_fd = MagicMock()
+        with patch.object(orch, "_get_flash_driver", return_value=mock_fd), \
+             patch.object(orch, "_generate_reports"), \
+             patch.object(orch, "_pre_test_setup"):
+            orch.run(serial="S", build_dir="/b", keep_data=True)
+            flash_cfg = mock_fd.flash.call_args[0][0]
+            assert flash_cfg.get("keep_data") is True
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_factory_reset_user_triggers_aoa(self, MockAdb, mock_sleep, settings, device_config):
+        """is_factory_reset=True + user build → AOA."""
+        orch, mock_adb = self._setup_orch(settings, device_config, MockAdb)
+        with patch.object(orch, "_init_aoa_hid") as mock_aoa, \
+             patch.object(orch, "_generate_reports"), \
+             patch.object(orch, "_pre_test_setup"):
+            orch.run(serial="S", build_type="user", is_factory_reset=True)
+            mock_aoa.assert_called_once()
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_cli_build_type_overrides_yaml(self, MockAdb, mock_sleep, settings, device_config):
+        """CLI build_type=userdebug overrides YAML user → no AOA."""
+        orch, mock_adb = self._setup_orch(settings, device_config, MockAdb)
+        with patch.object(orch, "_get_flash_driver") as mock_gfd, \
+             patch.object(orch, "_init_aoa_hid") as mock_aoa, \
+             patch.object(orch, "_generate_reports"), \
+             patch.object(orch, "_pre_test_setup"):
+            mock_gfd.return_value = MagicMock()
+            orch.run(serial="S", build_dir="/b", build_type="userdebug")
+            mock_aoa.assert_not_called()
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_fresh_state_longer_wifi_timeout(self, MockAdb, mock_sleep, settings, device_config):
+        """fresh_state=True → 45s WiFi timeout."""
+        orch, mock_adb = self._setup_orch(settings, device_config, MockAdb, with_aoa=False)
+        mock_adb.is_wifi_connected.return_value = False
+        with patch.object(orch, "_generate_reports"), \
+             patch.object(orch, "_pre_test_setup"):
+            orch.run(serial="S", is_factory_reset=True)
+            mock_adb.connect_wifi.assert_called_once()
+            assert mock_adb.connect_wifi.call_args.kwargs.get("wifi_timeout") == 45
+
+    @patch("smoke_test_ai.core.orchestrator.time.sleep")
+    @patch("smoke_test_ai.core.orchestrator.AdbController")
+    def test_keep_data_shorter_wifi_timeout(self, MockAdb, mock_sleep, settings, device_config):
+        """keep_data=True (fresh_state=False) → 15s WiFi timeout."""
+        orch, mock_adb = self._setup_orch(settings, device_config, MockAdb, with_aoa=False)
+        mock_adb.is_wifi_connected.return_value = False
+        with patch.object(orch, "_get_flash_driver") as mock_gfd, \
+             patch.object(orch, "_generate_reports"), \
+             patch.object(orch, "_pre_test_setup"):
+            mock_gfd.return_value = MagicMock()
+            orch.run(serial="S", build_dir="/b", keep_data=True)
+            mock_adb.connect_wifi.assert_called_once()
+            assert mock_adb.connect_wifi.call_args.kwargs.get("wifi_timeout") == 15

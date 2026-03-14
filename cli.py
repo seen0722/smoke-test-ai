@@ -19,8 +19,10 @@ def main():
 @click.option("--serial", default=None, help="Device serial number")
 @click.option("--skip-flash", is_flag=True, help="Skip flashing stage")
 @click.option("--skip-setup", is_flag=True, help="Skip Setup Wizard stage")
+@click.option("--build-type", type=click.Choice(["user", "userdebug"]), default=None, help="Build type (overrides YAML)")
+@click.option("--keep-data", is_flag=True, help="Skip userdata flash (preserve existing data)")
 @click.option("--config-dir", default="config", help="Config directory path")
-def run(device, suite, build, serial, skip_flash, skip_setup, config_dir):
+def run(device, suite, build, serial, skip_flash, skip_setup, build_type, keep_data, config_dir):
     """Run full smoke test pipeline."""
     from smoke_test_ai.core.orchestrator import Orchestrator
 
@@ -36,6 +38,8 @@ def run(device, suite, build, serial, skip_flash, skip_setup, config_dir):
         build_dir=build,
         skip_flash=skip_flash,
         skip_setup=skip_setup,
+        build_type=build_type,
+        keep_data=keep_data,
         config_dir=str(config_path),
     )
 
@@ -81,7 +85,8 @@ def test(suite, serial, config_dir):
 @click.option("--config-dir", default="config", help="Config directory path")
 @click.option("--boot-timeout", default=180, help="Max seconds to wait for boot after reset")
 @click.option("--reset-delay", default=None, type=int, help="Seconds to wait after factory reset before USB power cycle (default: from YAML or 10)")
-def reset_test(device, suite, serial, config_dir, boot_timeout, reset_delay):
+@click.option("--build-type", type=click.Choice(["user", "userdebug"]), default=None, help="Build type (overrides YAML)")
+def reset_test(device, suite, serial, config_dir, boot_timeout, reset_delay, build_type):
     """Factory reset → bootstrap → full smoke test."""
     from smoke_test_ai.core.orchestrator import Orchestrator
     from smoke_test_ai.drivers.adb_controller import AdbController
@@ -126,11 +131,16 @@ def reset_test(device, suite, serial, config_dir, boot_timeout, reset_delay):
         click.pause("Press any key after USB is reconnected...")
 
     # Wait for device to come back via ADB
-    console.print(f"\nWaiting for ADB connection (timeout: {boot_timeout}s)...")
-    if not adb.wait_for_device(timeout=boot_timeout):
-        console.print("[red]Device not found via ADB[/]")
-        raise SystemExit(1)
-    console.print("[green]Device connected via ADB[/]\n")
+    # For user builds, ADB won't be available until after AOA Stage 1
+    effective_build_type = build_type or device_config.get("device", {}).get("build_type", "userdebug")
+    if effective_build_type != "user":
+        console.print(f"\nWaiting for ADB connection (timeout: {boot_timeout}s)...")
+        if not adb.wait_for_device(timeout=boot_timeout):
+            console.print("[red]Device not found via ADB[/]")
+            raise SystemExit(1)
+        console.print("[green]Device connected via ADB[/]\n")
+    else:
+        console.print("\n[cyan]User build: ADB wait deferred to orchestrator (after AOA)[/]")
 
     # Run full pipeline (skip flash, run setup wizard skip + bootstrap)
     orch = Orchestrator(settings=settings, device_config=device_config)
@@ -139,6 +149,8 @@ def reset_test(device, suite, serial, config_dir, boot_timeout, reset_delay):
         suite_config=suite_config,
         skip_flash=True,
         skip_setup=False,
+        build_type=build_type,
+        is_factory_reset=True,
         config_dir=str(config_path),
     )
 

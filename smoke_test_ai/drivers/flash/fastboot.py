@@ -35,7 +35,16 @@ class FastbootFlashDriver(FlashDriver):
             return
 
         # Partition-by-partition mode
-        for image in config.get("images", []):
+        images = config.get("images", [])
+        if config.get("keep_data"):
+            original_count = len(images)
+            images = [img for img in images
+                      if not img["partition"].startswith("userdata")]
+            skipped = original_count - len(images)
+            if skipped:
+                logger.info(f"keep_data: skipped {skipped} userdata image(s)")
+
+        for image in images:
             partition = image["partition"]
             file_path = image["file"]
             logger.info(f"Flashing {partition}: {file_path}")
@@ -55,6 +64,15 @@ class FastbootFlashDriver(FlashDriver):
 
         script_dir = os.path.dirname(os.path.abspath(script))
         commands = self._parse_script(script)
+
+        # Filter out userdata commands when keep_data is set
+        if config.get("keep_data"):
+            original_count = len(commands)
+            commands = [cmd for cmd in commands
+                        if not (len(cmd) > 1 and cmd[1].startswith("userdata"))]
+            skipped = original_count - len(commands)
+            if skipped:
+                logger.info(f"keep_data: skipped {skipped} userdata command(s)")
 
         logger.info(f"Parsed {len(commands)} fastboot commands from: {script}")
         for i, cmd_args in enumerate(commands, 1):

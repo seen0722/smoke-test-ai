@@ -356,6 +356,9 @@ class Orchestrator:
         skip_flash: bool = False,
         skip_setup: bool = False,
         config_dir: str = "config",
+        build_type: str | None = None,
+        keep_data: bool = False,
+        is_factory_reset: bool = False,
     ) -> list[TestResult]:
         adb = AdbController(serial=serial)
 
@@ -367,6 +370,19 @@ class Orchestrator:
             off_duration=usb_power_cfg.get("off_duration", 3.0),
         ) if usb_power_cfg else None
 
+        # Adaptive pipeline decision logic
+        effective_build_type = build_type or self.device_config.get("build_type", "userdebug")
+        need_flash = not skip_flash and build_dir
+        need_aoa = (
+            effective_build_type == "user"
+            and not keep_data
+            and (need_flash or is_factory_reset)
+            and not skip_setup
+        )
+        fresh_state = (need_flash or is_factory_reset) and not keep_data
+        logger.info(f"Pipeline: build_type={effective_build_type}, "
+                    f"need_aoa={need_aoa}, fresh_state={fresh_state}")
+
         # Stage 0: Flash
         if not skip_flash and build_dir:
             logger.info("=== Stage 0: Flash Image ===")
@@ -374,6 +390,8 @@ class Orchestrator:
             flash_config = self._resolve_flash_config(
                 self.device_config["flash"], build_dir
             )
+            if keep_data:
+                flash_config["keep_data"] = True
             flash_driver.flash(flash_config)
             logger.info("Flash complete. Waiting for device boot...")
             time.sleep(10)
@@ -383,7 +401,7 @@ class Orchestrator:
                 usb_power.power_cycle()
 
         # Stage 1: Pre-ADB Setup (Blind AOA2 HID automation)
-        if not skip_setup and self.device_config.get("build_type") == "user":
+        if need_aoa:
             aoa_cfg = self.device_config.get("aoa", {})
             if aoa_cfg.get("enabled"):
                 logger.info("=== Stage 1: Pre-ADB Setup (Blind AOA2 HID) ===")
@@ -416,26 +434,27 @@ class Orchestrator:
             logger.error("Device not found via ADB")
             return []
 
-        # Skip Setup Wizard (userdebug: use ADB settings)
-        if not skip_setup:
+        # Skip Setup Wizard (only for fresh userdebug — AOA handles user builds)
+        if not skip_setup and fresh_state and not need_aoa:
             adb.skip_setup_wizard()
 
-        # FBE unlock first: must unlock before WiFi and other services work
-        user_state = adb.get_user_state()
-        if user_state == "RUNNING_LOCKED":
-            logger.warning("User storage is locked (FBE). Attempting unlock...")
-            pin = self.device_config.get("lock_pin")
-            if adb.unlock_keyguard(pin=pin):
-                logger.info("Device unlocked successfully — user storage is now accessible")
-            else:
-                logger.error(
-                    "Failed to unlock device. Many services (NFC, Launcher, etc.) "
-                    "will not start until user storage is unlocked."
-                )
+        # FBE unlock: only needed after state reset (fresh_state)
+        if fresh_state:
+            user_state = adb.get_user_state()
+            if user_state == "RUNNING_LOCKED":
+                logger.warning("User storage is locked (FBE). Attempting unlock...")
+                pin = self.device_config.get("lock_pin")
+                if adb.unlock_keyguard(pin=pin):
+                    logger.info("Device unlocked successfully — user storage is now accessible")
+                else:
+                    logger.error(
+                        "Failed to unlock device. Many services (NFC, Launcher, etc.) "
+                        "will not start until user storage is unlocked."
+                    )
 
-        # WiFi connection (longer timeout after factory reset / setup wizard)
+        # WiFi connection (longer timeout after full state reset)
         wifi_cfg = self.settings.get("wifi", {})
-        wifi_timeout = 45 if not skip_setup else 15
+        wifi_timeout = 45 if fresh_state else 15
         if wifi_cfg.get("ssid"):
             if adb.is_wifi_connected():
                 logger.info("WiFi already connected, skipping")
