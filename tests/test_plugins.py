@@ -1212,3 +1212,245 @@ class TestChargingPlugin:
         with patch("smoke_test_ai.plugins.charging.time.sleep"):
             result = charging_plugin.execute(tc, ctx)
         assert result.status == TestStatus.FAIL
+
+
+class TestSuspendPlugin:
+    @pytest.fixture
+    def suspend_plugin(self):
+        from smoke_test_ai.plugins.suspend import SuspendPlugin
+        return SuspendPlugin()
+
+    def _make_tc(self, **kwargs):
+        base = {"id": "suspend_test", "name": "Suspend/Deep Sleep",
+                "type": "suspend", "action": "deep_sleep",
+                "params": {"suspend_duration": 1, "adb_timeout": 5}}
+        base.update(kwargs)
+        return base
+
+    def test_unknown_action(self, suspend_plugin):
+        tc = {"id": "s0", "name": "S", "action": "unknown"}
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={})
+        result = suspend_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.ERROR
+
+    def test_skip_without_usb_power(self, suspend_plugin):
+        ctx = PluginContext(adb=MagicMock(), settings={}, device_capabilities={}, usb_power=None)
+        result = suspend_plugin.execute(self._make_tc(), ctx)
+        assert result.status == TestStatus.SKIP
+
+    def test_skip_when_stats_not_available(self, suspend_plugin):
+        adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout="cat: /sys/power/soc_sleep/stats: No such file or directory")
+        usb_power = MagicMock()
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={}, usb_power=usb_power)
+        result = suspend_plugin.execute(self._make_tc(), ctx)
+        assert result.status == TestStatus.SKIP
+
+    def test_deep_sleep_pass(self, suspend_plugin):
+        """Full flow: stats increase + screen wakes → PASS."""
+        adb = MagicMock()
+        usb_power = MagicMock()
+        adb.wait_for_device.return_value = True
+        adb.shell.side_effect = [
+            # 1. initial stats read
+            MagicMock(stdout="aosd:3, cxsd:3, ddr:3"),
+            # 2. airplane mode enable
+            MagicMock(stdout=""),
+            # 3. screen off (KEYCODE_POWER)
+            MagicMock(stdout=""),
+            # 4. wake keyevent
+            MagicMock(stdout=""),
+            # 5. screen state check
+            MagicMock(stdout="mScreenState=ON"),
+            # 6. final stats read
+            MagicMock(stdout="aosd\n\tCount                    :44\ncxsd\n\tCount                    :19\nddr \n\tCount                    :19\n"),
+            # 7. airplane mode disable
+            MagicMock(stdout=""),
+        ]
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={}, usb_power=usb_power)
+        with patch("smoke_test_ai.plugins.suspend.time.sleep"):
+            result = suspend_plugin.execute(self._make_tc(), ctx)
+        assert result.status == TestStatus.PASS
+        assert "aosd: 3→44" in result.message
+        usb_power.power_off.assert_called_once()
+        usb_power.power_on.assert_called_once()
+
+    def test_deep_sleep_not_entered(self, suspend_plugin):
+        """Stats don't increase → FAIL."""
+        adb = MagicMock()
+        usb_power = MagicMock()
+        adb.wait_for_device.return_value = True
+        adb.shell.side_effect = [
+            MagicMock(stdout="aosd\n\tCount                    :3\ncxsd\n\tCount                    :3\nddr \n\tCount                    :3\n"),       # initial
+            MagicMock(stdout=""),                              # airplane on
+            MagicMock(stdout=""),                              # screen off
+            MagicMock(stdout=""),                              # wake
+            MagicMock(stdout="mScreenState=ON"),               # screen on
+            MagicMock(stdout="aosd:3, cxsd:3, ddr:3"),        # same stats!
+            MagicMock(stdout=""),                              # airplane off
+        ]
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={}, usb_power=usb_power)
+        with patch("smoke_test_ai.plugins.suspend.time.sleep"):
+            result = suspend_plugin.execute(self._make_tc(), ctx)
+        assert result.status == TestStatus.FAIL
+        assert "Deep sleep not entered" in result.message
+
+    def test_screen_not_wake(self, suspend_plugin):
+        """Screen doesn't wake after resume → FAIL."""
+        adb = MagicMock()
+        usb_power = MagicMock()
+        adb.wait_for_device.return_value = True
+        adb.shell.side_effect = [
+            MagicMock(stdout="aosd:3, cxsd:3, ddr:3"),
+            MagicMock(stdout=""),                              # airplane on
+            MagicMock(stdout=""),                              # screen off
+            MagicMock(stdout=""),                              # wake
+            MagicMock(stdout="mScreenState=OFF"),              # screen still off!
+            MagicMock(stdout="aosd\n\tCount                    :10\ncxsd\n\tCount                    :10\nddr \n\tCount                    :10\n"),
+            MagicMock(stdout=""),                              # airplane off
+        ]
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={}, usb_power=usb_power)
+        with patch("smoke_test_ai.plugins.suspend.time.sleep"):
+            result = suspend_plugin.execute(self._make_tc(), ctx)
+        assert result.status == TestStatus.FAIL
+        assert "Screen did not wake" in result.message
+
+    def test_adb_not_reconnect(self, suspend_plugin):
+        """ADB doesn't reconnect after suspend → FAIL."""
+        adb = MagicMock()
+        usb_power = MagicMock()
+        adb.wait_for_device.return_value = False
+        adb.shell.side_effect = [
+            MagicMock(stdout="aosd:3, cxsd:3, ddr:3"),
+            MagicMock(stdout=""),                              # airplane on
+            MagicMock(stdout=""),                              # screen off
+        ]
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={}, usb_power=usb_power)
+        with patch("smoke_test_ai.plugins.suspend.time.sleep"):
+            result = suspend_plugin.execute(self._make_tc(), ctx)
+        assert result.status == TestStatus.FAIL
+        assert "not found via ADB" in result.message
+
+    def test_parse_sleep_stats_colon_format(self, suspend_plugin):
+        from smoke_test_ai.plugins.suspend import SuspendPlugin
+        adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout="aosd:44, cxsd:19, ddr:19")
+        stats = SuspendPlugin._read_sleep_stats(adb)
+        assert stats == {"aosd": 44, "cxsd": 19, "ddr": 19}
+
+    def test_parse_sleep_stats_inline_equals(self, suspend_plugin):
+        from smoke_test_ai.plugins.suspend import SuspendPlugin
+        adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout="aosd = 10\ncxsd = 5\nddr = 5\n")
+        stats = SuspendPlugin._read_sleep_stats(adb)
+        assert stats == {"aosd": 10, "cxsd": 5, "ddr": 5}
+
+    def test_parse_sleep_stats_qualcomm_multiline(self, suspend_plugin):
+        """Parse Qualcomm soc_sleep/stats multi-line format."""
+        from smoke_test_ai.plugins.suspend import SuspendPlugin
+        adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout=(
+            "aosd\n"
+            "\tCount                    :44\n"
+            "\tLast Entered At(sec)     :1234\n"
+            "\tLast Exited At(sec)      :1235\n"
+            "\tAccumulated Duration(sec):100\n"
+            "\tClient Votes             :0x0\n\n"
+            "cxsd\n"
+            "\tCount                    :19\n"
+            "\tLast Entered At(sec)     :1234\n"
+            "\tLast Exited At(sec)      :1235\n"
+            "\tAccumulated Duration(sec):50\n"
+            "\tClient Votes             :0x0\n\n"
+            "ddr \n"
+            "\tCount                    :19\n"
+            "\tLast Entered At(sec)     :1234\n"
+            "\tLast Exited At(sec)      :1235\n"
+            "\tAccumulated Duration(sec):50\n"
+            "\tClient Votes             :0x0\n"
+        ))
+        stats = SuspendPlugin._read_sleep_stats(adb)
+        assert stats == {"aosd": 44, "cxsd": 19, "ddr": 19}
+
+    def test_reboot_pass(self, suspend_plugin):
+        """ADB reboot → boot_completed=1 → PASS."""
+        adb = MagicMock()
+        adb.wait_for_device.return_value = True
+        adb.shell.side_effect = [
+            MagicMock(stdout=""),                    # reboot cmd
+            MagicMock(stdout="1"),                   # boot_completed
+        ]
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={})
+        tc = {"id": "reboot1", "name": "Reboot", "action": "reboot",
+              "params": {"boot_timeout": 5}}
+        with patch("smoke_test_ai.plugins.suspend.time.sleep"):
+            result = suspend_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+
+    def test_reboot_adb_timeout(self, suspend_plugin):
+        """ADB doesn't reconnect after reboot → FAIL."""
+        adb = MagicMock()
+        adb.wait_for_device.return_value = False
+        adb.shell.return_value = MagicMock(stdout="")
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={})
+        tc = {"id": "reboot2", "name": "Reboot", "action": "reboot",
+              "params": {"boot_timeout": 5}}
+        with patch("smoke_test_ai.plugins.suspend.time.sleep"):
+            result = suspend_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+
+    def test_reboot_boot_not_completed(self, suspend_plugin):
+        """Boot doesn't complete → FAIL."""
+        adb = MagicMock()
+        adb.wait_for_device.return_value = True
+        adb.shell.side_effect = [
+            MagicMock(stdout=""),    # reboot cmd
+            MagicMock(stdout=""),    # boot_completed empty
+        ]
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={})
+        tc = {"id": "reboot3", "name": "Reboot", "action": "reboot",
+              "params": {"boot_timeout": 5}}
+        with patch("smoke_test_ai.plugins.suspend.time.sleep"):
+            result = suspend_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+
+
+class TestCameraRecordVideo:
+    @pytest.fixture
+    def camera_plugin(self):
+        return CameraPlugin()
+
+    def test_record_video_pass(self, camera_plugin):
+        """Record video → found file > 0 bytes → PASS."""
+        adb = MagicMock()
+        adb.shell.side_effect = [
+            MagicMock(stdout=""),                     # touch marker
+            MagicMock(stdout=""),                     # wakeup
+            MagicMock(stdout=""),                     # dismiss keyguard
+            MagicMock(stdout=""),                     # force-stop
+            MagicMock(stdout=""),                     # am start video
+            MagicMock(stdout=""),                     # camera key start
+            MagicMock(stdout=""),                     # camera key stop
+            MagicMock(stdout="/sdcard/DCIM/Camera/VID_001.mp4"),  # find
+            MagicMock(stdout=""),                     # rm marker
+            MagicMock(stdout="5242880"),              # stat size (5MB)
+            MagicMock(stdout=""),                     # force-stop cleanup
+        ]
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={})
+        tc = {"id": "vid1", "name": "Video", "action": "record_video",
+              "params": {"record_duration": 1}}
+        with patch("smoke_test_ai.plugins.camera.time.sleep"):
+            result = camera_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.PASS
+        assert "5242880 bytes" in result.message
+
+    def test_record_video_no_file(self, camera_plugin):
+        """No video file found after recording → FAIL."""
+        adb = MagicMock()
+        adb.shell.return_value = MagicMock(stdout="")
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={})
+        tc = {"id": "vid2", "name": "Video", "action": "record_video",
+              "params": {"record_duration": 1}}
+        with patch("smoke_test_ai.plugins.camera.time.sleep"):
+            result = camera_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL

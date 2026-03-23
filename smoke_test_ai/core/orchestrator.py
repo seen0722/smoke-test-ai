@@ -26,6 +26,7 @@ from smoke_test_ai.plugins.bluetooth import BluetoothPlugin
 from smoke_test_ai.plugins.audio import AudioPlugin
 from smoke_test_ai.plugins.network import NetworkPlugin
 from smoke_test_ai.plugins.charging import ChargingPlugin
+from smoke_test_ai.plugins.suspend import SuspendPlugin
 
 logger = get_logger(__name__)
 
@@ -344,6 +345,7 @@ class Orchestrator:
             "audio": AudioPlugin(),
             "network": NetworkPlugin(),
             "charging": ChargingPlugin(),
+            "suspend": SuspendPlugin(),
         }
 
         return plugins, snippet, peer_snippet

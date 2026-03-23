@@ -24,6 +24,8 @@ class CameraPlugin(TestPlugin):
             return self._capture_and_verify(test_case, context)
         if action == "verify_latest_photo":
             return self._verify_latest_photo(test_case, context)
+        if action == "record_video":
+            return self._record_video(test_case, context)
         return TestResult(
             id=test_case["id"], name=test_case["name"],
             status=TestStatus.ERROR,
@@ -219,3 +221,72 @@ class CameraPlugin(TestPlugin):
                               message=f"Verified: {analysis.get('reason', '')}")
         return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                           message=f"LLM rejected: {analysis.get('reason', '')}")
+
+    def _record_video(self, tc: dict, ctx: PluginContext) -> TestResult:
+        """Record a short video and verify a video file was created."""
+        tid, tname = tc["id"], tc["name"]
+        params = tc.get("params", {})
+        record_duration = params.get("record_duration", 5)
+        adb = ctx.adb
+
+        try:
+            # 1. Create marker for new-file detection
+            marker = "/sdcard/.smoke_test_vid_marker"
+            adb.shell(f"touch {marker}")
+            time.sleep(0.5)
+
+            # 2. Launch camera in video mode
+            adb.shell("input keyevent KEYCODE_WAKEUP")
+            adb.shell("wm dismiss-keyguard")
+            adb.shell("am force-stop org.codeaurora.snapcam 2>/dev/null; "
+                       "am force-stop com.android.camera2 2>/dev/null")
+
+            launch_result = adb.shell(
+                "am start -a android.media.action.VIDEO_CAPTURE 2>&1"
+            )
+            time.sleep(3)
+
+            # 3. Start recording (press shutter)
+            adb.shell("input keyevent KEYCODE_CAMERA")
+            time.sleep(record_duration)
+
+            # 4. Stop recording (press shutter again)
+            adb.shell("input keyevent KEYCODE_CAMERA")
+            time.sleep(3)
+
+            # 5. Find new video file
+            search_dirs = [DCIM_PATH, "/sdcard/DCIM", "/sdcard/Movies"]
+            found = ""
+            for dp in search_dirs:
+                out = adb.shell(
+                    f"find '{dp}' -maxdepth 2 -newer {marker} "
+                    f"\\( -name '*.mp4' -o -name '*.3gp' \\) "
+                    f"-type f 2>/dev/null | head -1"
+                ).stdout.strip()
+                if out:
+                    found = out
+                    break
+
+            adb.shell(f"rm -f {marker}")
+
+            if not found:
+                return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                                  message="No new video file after recording attempt")
+
+            # 6. Check file size > 0
+            size_out = adb.shell(f"stat -c %s '{found}'").stdout.strip()
+            try:
+                size = int(size_out)
+            except ValueError:
+                size = 0
+
+            if size == 0:
+                return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                                  message=f"Video {found} has zero bytes")
+
+            filename = Path(found).name
+            return TestResult(id=tid, name=tname, status=TestStatus.PASS,
+                              message=f"Recorded {filename} ({size} bytes, {record_duration}s)")
+        finally:
+            adb.shell("am force-stop org.codeaurora.snapcam 2>/dev/null; "
+                       "am force-stop com.android.camera2 2>/dev/null")
