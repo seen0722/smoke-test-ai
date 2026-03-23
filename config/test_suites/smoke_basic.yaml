@@ -9,6 +9,25 @@ test_suite:
       command: "getprop sys.boot_completed"
       expected: "1"
 
+    # --- System Info ---
+    - id: "sku_id"
+      name: "SKU ID"
+      type: "adb_shell"
+      command: "getprop ro.boot.sku"
+      expected_pattern: ".+"
+
+    - id: "build_number"
+      name: "Build Number"
+      type: "adb_shell"
+      command: "getprop ro.build.display.id"
+      expected_pattern: ".+"
+
+    - id: "android_version"
+      name: "Android Version"
+      type: "adb_shell"
+      command: "getprop ro.build.version.release"
+      expected_pattern: "^[0-9]+"
+
     - id: "display_normal"
       name: "螢幕顯示正常"
       type: "screenshot_llm"
