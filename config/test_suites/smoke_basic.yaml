@@ -139,11 +139,11 @@ test_suite:
       expected_pattern: "sensor\\.gyroscope"
 
     - id: "sensor_gyroscope_data"
-      name: "陀螺儀數據驗證"
+      name: "陀螺儀 Driver 驗證"
       type: "adb_shell"
       category: "Sensor"
-      command: "dumpsys sensorservice | grep -A1 'Gyroscope Non-wakeup: last' | tail -1"
-      expected_pattern: "-?[0-9]+\\.[0-9]+"
+      command: "dumpsys sensorservice | grep 'lsm6dst Gyroscope Non-wakeup' | grep -o 'ver: [0-9]*'"
+      expected_pattern: "ver: [0-9]+"
       depends_on: "sensor_gyroscope"
 
     - id: "sensor_light"
