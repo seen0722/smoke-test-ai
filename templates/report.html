@@ -152,6 +152,26 @@
     border-bottom: 1px solid var(--border);
   }
 
+  /* ─── Preflight ─── */
+  .preflight { margin-bottom: 36px; }
+  .preflight-grid { display: flex; flex-direction: column; gap: 6px; }
+  .pf-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; border-radius: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .pf-icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+  .pf-name { font-weight: 600; min-width: 160px; flex-shrink: 0; }
+  .pf-msg { color: var(--text-dim); font-family: var(--mono); font-size: 12px; }
+  .pf-item.pf-ok .pf-icon { color: var(--green); }
+  .pf-item.pf-ok { border-color: rgba(52,211,153,.15); }
+  .pf-item.pf-warning .pf-icon { color: var(--amber); }
+  .pf-item.pf-warning { border-color: rgba(251,191,36,.2); background: rgba(251,191,36,.03); }
+  .pf-item.pf-critical .pf-icon { color: var(--red); }
+  .pf-item.pf-critical { border-color: rgba(248,113,113,.3); background: rgba(248,113,113,.05); }
+  .pf-item.pf-info .pf-icon { color: var(--accent); }
+
   /* ─── Filter Bar ─── */
   .filter-bar {
     display: flex; gap: 8px; margin-bottom: 20px; align-items: center; flex-wrap: wrap;
@@ -396,6 +416,21 @@
       {% if device_info.get(key) %}
       <div class="info-row"><span class="info-label">{{ label }}</span><span class="info-value">{{ device_info[key] }}</span></div>
       {% endif %}{% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if device_info.get("preflight") %}
+  <div class="preflight animate-in d3">
+    <div class="section-title">Preflight Check</div>
+    <div class="preflight-grid">
+      {% for p in device_info.preflight %}
+      <div class="pf-item pf-{{ p.level|lower }}">
+        <span class="pf-icon">{{ '✓' if p.level == 'OK' else ('✗' if p.level == 'CRITICAL' else ('!' if p.level == 'WARNING' else '~')) }}</span>
+        <span class="pf-name">{{ p.name }}</span>
+        <span class="pf-msg">{{ p.message }}</span>
+      </div>
+      {% endfor %}
     </div>
   </div>
   {% endif %}

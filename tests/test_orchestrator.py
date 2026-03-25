@@ -208,7 +208,15 @@ class TestOrchestratorRun:
         adb.wait_for_device.return_value = wait_for_device
         adb.get_user_state.return_value = user_state
         adb.is_wifi_connected.return_value = wifi_connected
-        adb.shell.return_value = _make_shell_result("")
+        adb.is_connected.return_value = True
+        # Return boot_completed=1 for preflight, empty for others
+        def _shell_side_effect(cmd):
+            if "sys.boot_completed" in cmd:
+                return _make_shell_result("1")
+            if "pm list packages" in cmd:
+                return _make_shell_result("package:com.google.android.mobly.snippet.bundled")
+            return _make_shell_result("")
+        adb.shell.side_effect = _shell_side_effect
         adb.get_device_info.return_value = {"model": "Test", "sdk": "33"}
         adb.skip_setup_wizard.return_value = True
         adb.unlock_keyguard.return_value = True
@@ -367,8 +375,16 @@ class TestAdaptivePipeline:
         mock_adb = MagicMock()
         mock_adb.wait_for_device.return_value = True
         mock_adb.is_wifi_connected.return_value = True
+        mock_adb.is_connected.return_value = True
         mock_adb.get_user_state.return_value = "RUNNING_UNLOCKED"
         mock_adb.get_device_info.return_value = {"model": "T", "sdk": "33"}
+        def _shell(cmd):
+            if "sys.boot_completed" in cmd:
+                return _make_shell_result("1")
+            if "pm list packages" in cmd:
+                return _make_shell_result("package:com.google.android.mobly.snippet.bundled")
+            return _make_shell_result("")
+        mock_adb.shell.side_effect = _shell
         MockAdb.return_value = mock_adb
         return orch, mock_adb
 

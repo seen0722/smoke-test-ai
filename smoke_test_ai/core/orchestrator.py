@@ -516,6 +516,16 @@ class Orchestrator:
         # Store suite_config for report generation
         self._suite_config = suite_config
 
+        # Preflight Check
+        preflight = self._preflight_check(adb, suite_config, usb_power)
+        device_info["preflight"] = preflight
+
+        # Abort on CRITICAL failures
+        critical_fails = [p for p in preflight if p["level"] == "CRITICAL"]
+        if critical_fails:
+            logger.error("Preflight CRITICAL failure — aborting test execution")
+            return []
+
         # Stage 3: Test Execute
         if suite_config:
             logger.info("=== Stage 3: Test Execute ===")
@@ -570,6 +580,132 @@ class Orchestrator:
         self._generate_reports(results, device_info=device_info, suite_config=suite_config)
 
         return results
+
+    def _preflight_check(self, adb, suite_config: dict | None, usb_power) -> list[dict]:
+        """Run preflight checks before test execution. Returns list of check results."""
+        logger.info("=== Preflight Check ===")
+        checks = []
+
+        # 1. ADB connected (CRITICAL)
+        connected = adb.is_connected()
+        checks.append({
+            "name": "ADB Connection",
+            "level": "CRITICAL" if not connected else "OK",
+            "message": f"Connected ({adb.serial})" if connected else "Device not connected",
+        })
+        if not connected:
+            self._log_preflight(checks)
+            return checks
+
+        # 2. Boot completed (CRITICAL)
+        boot = adb.shell("getprop sys.boot_completed")
+        boot_val = (boot.stdout if hasattr(boot, "stdout") else str(boot)).strip()
+        checks.append({
+            "name": "Device Boot",
+            "level": "CRITICAL" if boot_val != "1" else "OK",
+            "message": "Boot completed" if boot_val == "1" else f"boot_completed={boot_val}",
+        })
+
+        # 3. WiFi (WARNING)
+        wifi_ok = adb.is_wifi_connected()
+        checks.append({
+            "name": "WiFi",
+            "level": "OK" if wifi_ok else "WARNING",
+            "message": "Connected" if wifi_ok else "Not connected — network tests will fail",
+        })
+
+        # 4. LLM API (WARNING) — count how many tests need it
+        llm_tests = 0
+        if suite_config:
+            for tc in suite_config.get("test_suite", {}).get("tests", []):
+                if tc.get("type") in ("screenshot_llm",) or tc.get("action") in ("capture_and_verify", "verify_latest_photo"):
+                    llm_tests += 1
+
+        if llm_tests > 0:
+            llm_ok = False
+            try:
+                llm = self._get_llm_client()
+                if llm and hasattr(llm, "health_check"):
+                    llm_ok = llm.health_check()
+                elif llm:
+                    # Quick test: just check if client is configured
+                    llm_ok = bool(llm.base_url)
+            except Exception:
+                pass
+            checks.append({
+                "name": "LLM API",
+                "level": "OK" if llm_ok else "WARNING",
+                "message": "Available" if llm_ok else f"Not available — {llm_tests} test(s) will ERROR",
+                "affected": llm_tests,
+            })
+
+        # 5. SIM card (WARNING) — count telephony tests
+        sim_tests = 0
+        if suite_config:
+            for tc in suite_config.get("test_suite", {}).get("tests", []):
+                req = tc.get("requires", {})
+                if req.get("device_capability") == "has_sim":
+                    sim_tests += 1
+
+        if sim_tests > 0:
+            has_sim = self.device_config.get("has_sim", False)
+            if not has_sim:
+                # Double check via ADB
+                sim_result = adb.shell("dumpsys telephony.registry | grep mServiceState")
+                sim_out = (sim_result.stdout if hasattr(sim_result, "stdout") else str(sim_result)).strip()
+                has_sim = "OUT_OF_SERVICE" not in sim_out and sim_out != ""
+            checks.append({
+                "name": "SIM Card",
+                "level": "OK" if has_sim else "WARNING",
+                "message": "Detected" if has_sim else f"Not detected — {sim_tests} test(s) will SKIP",
+                "affected": sim_tests,
+            })
+
+        # 6. USB Power (INFO)
+        usb_tests = 0
+        if suite_config:
+            for tc in suite_config.get("test_suite", {}).get("tests", []):
+                req = tc.get("requires", {})
+                if req.get("device_capability") == "usb_power":
+                    usb_tests += 1
+
+        if usb_tests > 0:
+            checks.append({
+                "name": "USB Power Control",
+                "level": "OK" if usb_power else "INFO",
+                "message": "Configured" if usb_power else f"Not configured — {usb_tests} test(s) will SKIP",
+                "affected": usb_tests,
+            })
+
+        # 7. Mobly Snippet APK (WARNING)
+        snippet_result = adb.shell("pm list packages com.google.android.mobly.snippet.bundled")
+        snippet_out = (snippet_result.stdout if hasattr(snippet_result, "stdout") else str(snippet_result)).strip()
+        snippet_installed = "com.google.android.mobly.snippet.bundled" in snippet_out
+        checks.append({
+            "name": "Mobly Snippet APK",
+            "level": "OK" if snippet_installed else "WARNING",
+            "message": "Installed" if snippet_installed else "Not installed — plugin tests may fail",
+        })
+
+        self._log_preflight(checks)
+        return checks
+
+    @staticmethod
+    def _log_preflight(checks: list[dict]) -> None:
+        """Log preflight results with visual formatting."""
+        icons = {"CRITICAL": "✗", "WARNING": "!", "INFO": "~", "OK": "✓"}
+        for c in checks:
+            icon = icons.get(c["level"], "?")
+            logger.info(f"  [{icon}] {c['level']:8s} {c['name']} — {c['message']}")
+
+        warnings = sum(1 for c in checks if c["level"] == "WARNING")
+        criticals = sum(1 for c in checks if c["level"] == "CRITICAL")
+        if criticals:
+            logger.error(f"Preflight: {criticals} CRITICAL failure(s) — aborting")
+        elif warnings:
+            logger.warning(f"Preflight: {warnings} warning(s) — proceeding with known limitations")
+        else:
+            logger.info("Preflight: all checks passed")
 
     def _generate_reports(self, results: list[TestResult], device_info: dict | None = None, suite_config: dict | None = None) -> None:
         report_cfg = self.settings.get("reporting", {})
