@@ -408,15 +408,16 @@ YAML 測試案例中可使用 `${VAR}` 變數，由 Orchestrator 在執行前自
 | `${PEER_PHONE_NUMBER}` | device config → `peer_phone_number` | Peer 裝置電話號碼 |
 | `${PHONE_NUMBER}` | device config → `phone_number` | DUT 電話號碼 |
 
-## 內建測試套件 (smoke_basic — 65 項，按 BSP 子系統分類)
+## 內建測試套件 (smoke_basic — 68 項，按 BSP 子系統分類)
 
 | 子系統 | 測試數 | 測試項目 |
 |--------|--------|---------|
 | **Boot** | 8 | 開機完成、SKU ID、Build Number、Android Version、Kernel 版本、SELinux Enforcing、Partition 完整性、ADB Reboot |
+| **Firmware** | 3 | WWAN Module、Touch Controller、Keypad MCU firmware 版本 |
 | **Display** | 3 | 螢幕顯示(LLM)、亮度寫入驗證、自動旋轉 |
 | **Touchscreen** | 1 | 觸控裝置存在 |
-| **Sensor** | 6 | 加速度計(存在+數據)、陀螺儀(存在+數據)、光線感測器、磁力計 |
-| **Camera** | 5 | 相機裝置、後鏡頭拍照、前鏡頭拍照、照片品質(LLM)、錄影 |
+| **Sensor** | 6 | 加速度計(存在+數據)、陀螺儀(存在+Driver)、光線感測器、磁力計 |
+| **Camera** | 5 | 相機裝置、後鏡頭拍照、前鏡頭拍照、照片品質(LLM)、影片編碼 |
 | **Audio** | 5 | 播放、音量、麥克風、裝置偵測、路由 |
 | **WiFi** | 8 | 連線、掃描、SSID、開關、連線品質、DHCP、5GHz、熱點 |
 | **Bluetooth** | 6 | 啟用、BLE 掃描、開關、Classic 掃描、Adapter、配對列表 |
@@ -429,7 +430,7 @@ YAML 測試案例中可使用 `${VAR}` 變數，由 Orchestrator 在執行前自
 | **USB** | 1 | USB Gadget 模式 |
 | **System** | 1 | 無系統崩潰 |
 
-> 進階測試已移至獨立套件：`wifi_advanced.yaml`（P2P、Aware）、`bluetooth_advanced.yaml`（BLE 廣播、LE Audio）
+> 進階測試已移至獨立套件：`wifi_advanced.yaml`（P2P、Aware）、`bluetooth_advanced.yaml`（BLE 廣播、LE Audio）、`battery_life.yaml`（17 項電池/電源測試）
 
 ### 自訂測試項目
 
@@ -486,12 +487,22 @@ Stage 2: ADB Bootstrap + Pre-test Setup
     │  自動授予 BT/Location/Phone/SMS/Audio runtime 權限 (Android 12+)
     │  清除上次測試資料 → 授予相機權限 → 解析 YAML 變數
     ▼
+Preflight Check
+    │  ADB 連線 / Boot 完成（CRITICAL → 中止）
+    │  WiFi / LLM API / SIM 卡 / USB Power / Mobly APK（WARNING → 繼續）
+    │  提前告知哪些測試會 SKIP 或 ERROR
+    ▼
 Stage 3: Test Execute
     │  依 YAML 測試套件逐項執行測試（含 Plugin 功能測試）
     │  Mobly Snippet 自動載入（telephony/wifi/bluetooth/audio/network 測試時）
     ▼
+Post-test: Bugreport + Crash Analysis
+    │  adb bugreport → 儲存 zip 到 results/
+    │  掃描 logcat crash / ANR / tombstones / kernel panic
+    ▼
 Stage 4: Report
        CLI 表格 / JSON / HTML 報告 + Test Plan 輸出
+       HTML 含：子系統摘要、Preflight 狀態、Crash 分析、測試詳情（含 procedure/criteria）
 ```
 
 ### Factory Reset Pipeline（reset-test）
