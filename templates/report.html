@@ -159,7 +159,7 @@
   /* ─── Device Info ─── */
   .device-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 16px;
     margin-bottom: 36px;
   }
@@ -440,20 +440,18 @@
     </div>
     <div class="device-panel">
       <h3>Software</h3>
-      {% for key, label in [("android_version", "Android Version"), ("sdk_version", "SDK Level"), ("security_patch", "Security Patch"), ("build_id", "Build ID"), ("build_type", "Build Type"), ("build_fingerprint", "Fingerprint"), ("kernel_version", "Kernel")] %}
+      {% for key, label in [("android_version", "Android Version"), ("sdk_version", "SDK Level"), ("security_patch", "Security Patch"), ("build_id", "Build ID"), ("build_type", "Build Type"), ("gms_version", "GMS Version"), ("build_fingerprint", "Fingerprint"), ("kernel_version", "Kernel")] %}
       {% if device_info.get(key) %}
       <div class="info-row"><span class="info-label">{{ label }}</span><span class="info-value">{{ device_info[key] }}</span></div>
       {% endif %}{% endfor %}
     </div>
-    {% if device_info.get("fw_wwan") or device_info.get("fw_touch") or device_info.get("fw_keypad") %}
-    <div class="device-panel" style="grid-column: 1 / -1;">
+    <div class="device-panel">
       <h3>Component Firmware</h3>
-      {% for key, label in [("fw_wwan", "WWAN Module"), ("fw_touch", "Touch Controller"), ("fw_keypad", "Keypad MCU")] %}
+      {% for key, label in [("fw_wwan", "WWAN Version"), ("fw_wwan_date", "WWAN Build Date"), ("fw_touch", "Touch Controller"), ("fw_keypad", "Keypad MCU")] %}
       {% if device_info.get(key) %}
       <div class="info-row"><span class="info-label">{{ label }}</span><span class="info-value">{{ device_info[key] }}</span></div>
       {% endif %}{% endfor %}
     </div>
-    {% endif %}
   </div>
   {% endif %}
 

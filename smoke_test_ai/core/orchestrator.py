@@ -479,6 +479,15 @@ class Orchestrator:
         # Collect device info for reports
         device_info = adb.get_device_info()
 
+        # Collect GMS version
+        try:
+            gms_result = adb.shell("pm dump com.google.android.gms | grep 'versionName' | head -1 | sed 's/.*versionName=//'")
+            gms_ver = (gms_result.stdout if hasattr(gms_result, "stdout") else str(gms_result)).strip()
+            if gms_ver:
+                device_info["gms_version"] = gms_ver
+        except Exception:
+            pass
+
         # Collect component firmware versions
         fw_commands = {
             "fw_wwan": "getprop gsm.version.baseband",
@@ -493,6 +502,12 @@ class Orchestrator:
                     device_info[key] = val
             except Exception:
                 pass
+        # Split WWAN firmware into version and build date
+        wwan = device_info.get("fw_wwan", "")
+        if " " in wwan:
+            parts = wwan.split(" ", 1)
+            device_info["fw_wwan"] = parts[0]
+            device_info["fw_wwan_date"] = parts[1]
 
         # Resolve ${VAR} placeholders before test execution
         if suite_config:
