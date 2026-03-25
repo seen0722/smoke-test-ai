@@ -1,0 +1,16 @@
+test_suite:
+  name: "WiFi Advanced Test"
+  timeout: 300
+
+  tests:
+    - id: "wifi_p2p"
+      name: "WiFi P2P 支援"
+      type: "wifi"
+      category: "WiFi"
+      action: "is_p2p_supported"
+
+    - id: "wifi_aware"
+      name: "WiFi Aware 支援"
+      type: "wifi"
+      category: "WiFi"
+      action: "is_aware_available"

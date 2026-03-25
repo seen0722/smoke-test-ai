@@ -76,6 +76,37 @@ class TestHtmlReporter:
         assert "Skipped" in html  # summary card label
         assert "Error" in html    # summary card label
 
+    def test_generate_with_categories(self, sample_results, tmp_path):
+        output = tmp_path / "report_cat.html"
+        reporter = HtmlReporter(
+            template_dir=Path(__file__).parent.parent / "templates"
+        )
+        category_map = {"t1": "Boot", "t2": "WiFi", "t3": "Telephony", "t4": "Display"}
+        reporter.generate(
+            results=sample_results,
+            suite_name="Basic Smoke",
+            device_name="Product-A",
+            output_path=output,
+            category_map=category_map,
+        )
+        assert output.exists()
+        html = output.read_text()
+        assert "Subsystem Summary" in html
+        assert "Boot" in html
+        assert "WiFi" in html
+        assert "✅ PASS" in html or "❌ FAIL" in html
+
+    def test_category_summary_logic(self, sample_results):
+        reporter = HtmlReporter()
+        category_map = {"t1": "Boot", "t2": "Network", "t3": "Network", "t4": "Display"}
+        categories = reporter._build_category_summary(sample_results, category_map)
+        assert len(categories) == 3  # Boot, Network, Display
+        boot = next(c for c in categories if c["name"] == "Boot")
+        assert boot["total"] == 1
+        assert boot["passed"] == 1
+        network = next(c for c in categories if c["name"] == "Network")
+        assert network["total"] == 2
+
 
 @pytest.fixture
 def sample_suite_config():

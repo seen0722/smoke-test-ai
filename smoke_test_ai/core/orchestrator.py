@@ -537,11 +537,11 @@ class Orchestrator:
 
         # Stage 4: Report
         logger.info("=== Stage 4: Report ===")
-        self._generate_reports(results, device_info=device_info)
+        self._generate_reports(results, device_info=device_info, suite_config=suite_config)
 
         return results
 
-    def _generate_reports(self, results: list[TestResult], device_info: dict | None = None) -> None:
+    def _generate_reports(self, results: list[TestResult], device_info: dict | None = None, suite_config: dict | None = None) -> None:
         report_cfg = self.settings.get("reporting", {})
         formats = report_cfg.get("formats", ["cli"])
         output_dir = Path(report_cfg.get("output_dir", "results/"))
@@ -555,8 +555,14 @@ class Orchestrator:
             logger.info(f"JSON report: file://{json_path.resolve()}")
 
         if "html" in formats:
+            # Build category map from suite config
+            category_map = {}
+            if suite_config:
+                for tc in suite_config.get("test_suite", {}).get("tests", []):
+                    category_map[tc["id"]] = tc.get("category", "Other")
+
             html_path = output_dir / f"{self.device_name}_report.html"
-            HtmlReporter().generate(results, "Smoke Test", self.device_name, html_path, device_info)
+            HtmlReporter().generate(results, "Smoke Test", self.device_name, html_path, device_info, category_map)
             logger.info(f"HTML report: file://{html_path.resolve()}")
 
             if getattr(self, "_suite_config", None):

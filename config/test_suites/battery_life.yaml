@@ -1,0 +1,116 @@
+test_suite:
+  name: "Battery Life Test"
+  timeout: 900
+
+  tests:
+    # --- 電池基本狀態 ---
+    - id: "battery_status"
+      name: "電池狀態"
+      type: "adb_shell"
+      command: "dumpsys battery | grep 'status'"
+      expected_pattern: "status: [2-5]"
+
+    - id: "battery_level"
+      name: "電池電量"
+      type: "adb_shell"
+      command: "dumpsys battery | grep 'level'"
+      expected_pattern: "level: [0-9]+"
+
+    - id: "battery_health"
+      name: "電池健康狀態"
+      type: "adb_shell"
+      command: "dumpsys battery | grep 'health'"
+      expected_pattern: "health: 2"
+
+    - id: "battery_temperature"
+      name: "電池溫度"
+      type: "adb_shell"
+      command: "dumpsys battery | grep 'temperature'"
+      expected_pattern: "temperature: [1-4][0-9]{2}"
+
+    - id: "battery_voltage"
+      name: "電池電壓"
+      type: "adb_shell"
+      command: "dumpsys battery | grep 'voltage'"
+      expected_pattern: "voltage: [3-4][0-9]{3}"
+
+    # --- 充電功能 ---
+    - id: "charging_connected"
+      name: "充電連線狀態"
+      type: "adb_shell"
+      command: "dumpsys battery | grep 'powered'"
+      expected_pattern: ".*powered: true"
+
+    - id: "charging_detection"
+      name: "充電偵測測試"
+      type: "charging"
+      action: "detect"
+      params:
+        off_duration: 5
+        settle_time: 5
+      depends_on: "charging_connected"
+      requires:
+        device_capability: "usb_power"
+
+    # --- 電源管理 ---
+    - id: "suspend_deep_sleep"
+      name: "Suspend/Resume + Deep Sleep 驗證"
+      type: "suspend"
+      action: "deep_sleep"
+      params:
+        suspend_duration: 120
+        adb_timeout: 60
+      requires:
+        device_capability: "usb_power"
+
+    # --- Wakelock 檢查 ---
+    - id: "wakelock_count"
+      name: "Wakelock 數量檢查"
+      type: "adb_shell"
+      command: "dumpsys power | grep 'Wake Locks: size=' | sed 's/.*size=//'"
+      expected_pattern: "^[0-9]+$"
+
+    - id: "no_partial_wakelocks"
+      name: "無異常 Partial Wakelock"
+      type: "adb_shell"
+      command: "dumpsys power | grep -c 'PARTIAL_WAKE_LOCK' || echo 0"
+      expected_pattern: "^[0-9]+$"
+
+    # --- 省電模式 ---
+    - id: "doze_enabled"
+      name: "Doze 模式可用"
+      type: "adb_shell"
+      command: "dumpsys deviceidle | grep 'mDeepEnabled'"
+      expected_contains: "true"
+
+    - id: "battery_saver_available"
+      name: "省電模式可用"
+      type: "adb_shell"
+      command: "settings get global low_power"
+      expected_pattern: "^[01]$"
+
+    # --- 螢幕電源設定 ---
+    - id: "screen_timeout"
+      name: "螢幕自動關閉設定"
+      type: "adb_shell"
+      command: "settings get system screen_off_timeout"
+      expected_pattern: "^[0-9]+$"
+
+    - id: "adaptive_brightness"
+      name: "自適應亮度"
+      type: "adb_shell"
+      command: "settings get system screen_brightness_mode"
+      expected_pattern: "^[01]$"
+
+    # --- Deep Sleep 計數 (Qualcomm) ---
+    - id: "soc_sleep_stats"
+      name: "SoC Sleep 狀態"
+      type: "adb_shell"
+      command: "cat /sys/power/soc_sleep/stats | grep -A1 'aosd' | grep Count"
+      expected_pattern: "Count\\s*:[0-9]+"
+
+    - id: "rpmh_apss_sleep"
+      name: "APSS Sleep 計數"
+      type: "adb_shell"
+      command: "cat /sys/power/rpmh_stats/master_stats | grep -A1 'APSS' | grep 'Sleep Count'"
+      expected_pattern: "Sleep Count:0x[0-9a-f]+"

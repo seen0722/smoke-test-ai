@@ -1,0 +1,18 @@
+test_suite:
+  name: "Bluetooth Advanced Test"
+  timeout: 300
+
+  tests:
+    - id: "ble_advertise"
+      name: "BLE 廣播測試"
+      type: "bluetooth"
+      category: "Bluetooth"
+      action: "ble_advertise"
+      params:
+        duration: 3
+
+    - id: "bt_le_audio"
+      name: "LE Audio 支援"
+      type: "bluetooth"
+      category: "Bluetooth"
+      action: "le_audio_supported"
