@@ -335,6 +335,32 @@
   /* ─── Flat table fallback ─── */
   .flat-table { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
 
+  /* ─── Crash Analysis ─── */
+  .crash-summary { margin-bottom: 36px; }
+  .crash-badge {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 20px; border-radius: var(--radius);
+    font-size: 14px; font-weight: 600; margin-bottom: 12px;
+  }
+  .crash-badge .crash-icon { font-size: 18px; }
+  .crash-clean { background: var(--green-bg); border: 1px solid var(--green-border); color: var(--green); }
+  .crash-found { background: var(--red-bg); border: 1px solid var(--red-border); color: var(--red); }
+  .crash-bugreport {
+    display: flex; gap: 12px; align-items: center;
+    padding: 10px 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); margin-bottom: 12px; font-size: 12px;
+  }
+  .crash-table { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+  .crash-type {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 4px;
+    white-space: nowrap;
+  }
+  .ct-fatal-exception { color: var(--red); background: var(--red-bg); }
+  .ct-anr { color: var(--amber); background: var(--amber-bg); }
+  .ct-native-crash { color: var(--pink); background: rgba(244,114,182,.1); }
+  .ct-kernel { color: #ef4444; background: rgba(239,68,68,.1); }
+
   /* ─── Footer ─── */
   footer {
     margin-top: 48px; padding-top: 20px;
@@ -592,6 +618,39 @@
       </tr>
       {% endfor %}
     </table>
+  </div>
+  {% endif %}
+
+  {% if device_info.get("crash_analysis") %}
+  {% set ca = device_info.crash_analysis %}
+  <div class="section-title animate-in d5">Crash Analysis</div>
+  <div class="crash-summary animate-in d5">
+    <div class="crash-badge {{ 'crash-clean' if ca.total_crashes == 0 else 'crash-found' }}">
+      {% if ca.total_crashes == 0 %}
+        <span class="crash-icon">✓</span>
+        <span>No crashes detected during test execution</span>
+      {% else %}
+        <span class="crash-icon">✗</span>
+        <span>{{ ca.total_crashes }} crash{{ 'es' if ca.total_crashes > 1 else '' }} detected</span>
+      {% endif %}
+    </div>
+    {% if ca.bugreport_path %}
+    <div class="crash-bugreport">
+      <span class="detail-label">Bugreport</span>
+      <span class="detail-value">{{ ca.bugreport_path }}</span>
+    </div>
+    {% endif %}
+    {% if ca.crashes %}
+    <table class="crash-table">
+      <tr><th>Type</th><th>Detail</th></tr>
+      {% for c in ca.crashes %}
+      <tr>
+        <td><span class="crash-type ct-{{ c.type|lower|replace(' ', '-') }}">{{ c.type }}</span></td>
+        <td class="msg-col">{{ c.detail }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% endif %}
   </div>
   {% endif %}
 

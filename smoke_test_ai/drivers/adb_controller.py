@@ -237,3 +237,6 @@ class AdbController:
         if mode:
             return self._run("reboot", mode)
         return self._run("reboot")
+
+    def bugreport(self, output_path: str) -> subprocess.CompletedProcess:
+        return self._run("bugreport", output_path, timeout=180)

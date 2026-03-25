@@ -575,11 +575,98 @@ class Orchestrator:
         else:
             results = []
 
+        # Post-test: Bugreport + Crash Analysis
+        try:
+            crash_analysis = self._capture_bugreport_and_analyze(adb)
+            if crash_analysis:
+                device_info["crash_analysis"] = crash_analysis
+        except Exception as e:
+            logger.warning(f"Crash analysis failed: {e}")
+
         # Stage 4: Report
         logger.info("=== Stage 4: Report ===")
         self._generate_reports(results, device_info=device_info, suite_config=suite_config)
 
         return results
+
+    def _capture_bugreport_and_analyze(self, adb) -> dict | None:
+        """Capture bugreport and analyze for crashes during test execution."""
+        logger.info("=== Post-test: Bugreport & Crash Analysis ===")
+
+        output_dir = Path(self.settings.get("output_dir", "results"))
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1. Capture bugreport
+        bugreport_path = output_dir / f"{self.device_name}_bugreport"
+        zip_path = None
+        try:
+            logger.info("Capturing bugreport (this may take 1-2 minutes)...")
+            result = adb.bugreport(str(bugreport_path))
+
+            # adb bugreport creates a .zip file
+            zip_path = bugreport_path.with_suffix(".zip")
+            if not zip_path.exists():
+                zips = list(output_dir.glob(f"{self.device_name}_bugreport*.zip"))
+                zip_path = zips[0] if zips else None
+
+            if zip_path and zip_path.exists():
+                logger.info(f"Bugreport saved: {zip_path}")
+            else:
+                logger.warning("Bugreport zip not found")
+                zip_path = None
+        except Exception as e:
+            logger.warning(f"Bugreport capture failed: {e}")
+
+        # 2. Analyze crashes from logcat (faster than parsing bugreport zip)
+        crashes = []
+        try:
+            # System crashes (Java)
+            crash_log = adb.shell("logcat -b crash -d")
+            crash_out = crash_log.stdout if hasattr(crash_log, "stdout") else str(crash_log)
+            for line in crash_out.splitlines():
+                if "FATAL EXCEPTION" in line:
+                    crashes.append({"type": "FATAL EXCEPTION", "detail": line.strip()})
+
+            # ANR
+            anr_log = adb.shell("logcat -b events -d | grep 'am_anr'")
+            anr_out = anr_log.stdout if hasattr(anr_log, "stdout") else str(anr_log)
+            for line in anr_out.splitlines():
+                if "am_anr" in line:
+                    crashes.append({"type": "ANR", "detail": line.strip()})
+
+            # Native crashes
+            tombstones = adb.shell("ls /data/tombstones/ 2>/dev/null | tail -5")
+            tomb_out = tombstones.stdout if hasattr(tombstones, "stdout") else str(tombstones)
+            for line in tomb_out.splitlines():
+                line = line.strip()
+                if line:
+                    crashes.append({"type": "Native Crash", "detail": f"/data/tombstones/{line}"})
+
+            # Kernel panics
+            dmesg = adb.shell("dmesg | grep -iE '(panic|oops|bug:)' | tail -5")
+            dmesg_out = dmesg.stdout if hasattr(dmesg, "stdout") else str(dmesg)
+            for line in dmesg_out.splitlines():
+                line = line.strip()
+                if line:
+                    crashes.append({"type": "Kernel", "detail": line})
+
+        except Exception as e:
+            logger.warning(f"Crash analysis failed: {e}")
+
+        analysis = {
+            "bugreport_path": str(zip_path) if zip_path else None,
+            "total_crashes": len(crashes),
+            "crashes": crashes[:20],  # Limit to 20 most recent
+        }
+
+        if crashes:
+            logger.warning(f"Found {len(crashes)} crash(es) during test execution!")
+            for c in crashes[:5]:
+                logger.warning(f"  [{c['type']}] {c['detail'][:100]}")
+        else:
+            logger.info("No crashes detected during test execution")
+
+        return analysis
 
     def _preflight_check(self, adb, suite_config: dict | None, usb_power) -> list[dict]:
         """Run preflight checks before test execution. Returns list of check results."""
