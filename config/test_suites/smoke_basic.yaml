@@ -41,6 +41,30 @@ test_suite:
       command: "uname -r"
       expected_pattern: "^[0-9]+\\.[0-9]+\\."
 
+    # ============================================================
+    # Component Firmware
+    # ============================================================
+    - id: "fw_wwan"
+      name: "WWAN Module Firmware"
+      type: "adb_shell"
+      category: "Firmware"
+      command: "getprop gsm.version.baseband"
+      expected_pattern: ".+"
+
+    - id: "fw_touch"
+      name: "Touch Controller Firmware"
+      type: "adb_shell"
+      category: "Firmware"
+      command: "cat /sys/devices/platform/soc/a94000.i2c/i2c-5/5-002a/fw_version"
+      expected_pattern: ".+"
+
+    - id: "fw_keypad"
+      name: "Keypad MCU Firmware"
+      type: "adb_shell"
+      category: "Firmware"
+      command: "cat /sys/devices/platform/soc/98c000.i2c/i2c-2/2-0012/fw"
+      expected_pattern: ".+"
+
     - id: "selinux_enforcing"
       name: "SELinux Enforcing"
       type: "adb_shell"

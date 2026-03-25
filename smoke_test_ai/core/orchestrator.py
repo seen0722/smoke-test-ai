@@ -479,6 +479,21 @@ class Orchestrator:
         # Collect device info for reports
         device_info = adb.get_device_info()
 
+        # Collect component firmware versions
+        fw_commands = {
+            "fw_wwan": "getprop gsm.version.baseband",
+            "fw_touch": "cat /sys/devices/platform/soc/a94000.i2c/i2c-5/5-002a/fw_version 2>/dev/null",
+            "fw_keypad": "cat /sys/devices/platform/soc/98c000.i2c/i2c-2/2-0012/fw 2>/dev/null",
+        }
+        for key, cmd in fw_commands.items():
+            try:
+                result = adb.shell(cmd)
+                val = (result.stdout if hasattr(result, "stdout") else str(result)).strip()
+                if val:
+                    device_info[key] = val
+            except Exception:
+                pass
+
         # Resolve ${VAR} placeholders before test execution
         if suite_config:
             suite_config = self._resolve_variables(suite_config)

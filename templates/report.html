@@ -445,6 +445,15 @@
       <div class="info-row"><span class="info-label">{{ label }}</span><span class="info-value">{{ device_info[key] }}</span></div>
       {% endif %}{% endfor %}
     </div>
+    {% if device_info.get("fw_wwan") or device_info.get("fw_touch") or device_info.get("fw_keypad") %}
+    <div class="device-panel" style="grid-column: 1 / -1;">
+      <h3>Component Firmware</h3>
+      {% for key, label in [("fw_wwan", "WWAN Module"), ("fw_touch", "Touch Controller"), ("fw_keypad", "Keypad MCU")] %}
+      {% if device_info.get(key) %}
+      <div class="info-row"><span class="info-label">{{ label }}</span><span class="info-value">{{ device_info[key] }}</span></div>
+      {% endif %}{% endfor %}
+    </div>
+    {% endif %}
   </div>
   {% endif %}
 
