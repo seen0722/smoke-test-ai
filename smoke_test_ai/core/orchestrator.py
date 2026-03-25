@@ -679,10 +679,31 @@ class Orchestrator:
                     usb_tests += 1
 
         if usb_tests > 0:
+            usb_ok = False
+            usb_msg = f"Not configured — {usb_tests} test(s) will SKIP"
+            if usb_power:
+                # Verify uhubctl can actually communicate with the hub
+                try:
+                    import subprocess
+                    hub_loc = self.device_config.get("usb_power", {}).get("hub_location", "")
+                    port = self.device_config.get("usb_power", {}).get("port", "")
+                    result = subprocess.run(
+                        ["uhubctl", "-l", str(hub_loc), "-p", str(port)],
+                        capture_output=True, text=True, timeout=5,
+                    )
+                    if result.returncode == 0 and "power" in result.stdout.lower():
+                        usb_ok = True
+                        usb_msg = f"hub {hub_loc} port {port} — responding"
+                    else:
+                        usb_msg = f"hub {hub_loc} port {port} — uhubctl error"
+                except FileNotFoundError:
+                    usb_msg = "uhubctl not installed"
+                except Exception as e:
+                    usb_msg = f"uhubctl check failed: {str(e)[:40]}"
             checks.append({
                 "name": "USB Power Control",
-                "level": "OK" if usb_power else "INFO",
-                "message": "Configured" if usb_power else f"Not configured — {usb_tests} test(s) will SKIP",
+                "level": "OK" if usb_ok else ("WARNING" if usb_power else "INFO"),
+                "message": usb_msg,
                 "affected": usb_tests,
             })
 
