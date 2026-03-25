@@ -34,6 +34,7 @@
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
 
   body {
     font-family: var(--sans);
@@ -54,13 +55,23 @@
     padding-bottom: 24px;
     border-bottom: 1px solid var(--border);
   }
+  .header-icon {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    background: var(--accent-dim);
+    border: 1px solid rgba(108,140,255,.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    margin-right: 14px;
+    flex-shrink: 0;
+  }
+  .header-left { display: flex; align-items: flex-start; }
   header h1 {
     font-size: 22px;
     font-weight: 700;
     letter-spacing: -0.3px;
     color: var(--text);
   }
-  header h1 span { color: var(--accent); }
   .header-meta {
     display: flex;
     gap: 20px;
@@ -70,79 +81,41 @@
     font-family: var(--mono);
   }
   .header-meta .sep { color: var(--text-muted); }
-  .header-right {
-    text-align: right;
-    font-size: 13px;
-    color: var(--text-dim);
-  }
+  .header-right { text-align: right; font-size: 13px; color: var(--text-dim); }
   .overall-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 16px;
-    border-radius: 20px;
-    font-weight: 700;
-    font-size: 14px;
-    margin-bottom: 6px;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 16px; border-radius: 20px;
+    font-weight: 700; font-size: 14px; margin-bottom: 6px;
   }
   .overall-badge.pass { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
   .overall-badge.fail { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
 
   /* ─── Stats Row ─── */
-  .stats-row {
-    display: grid;
-    grid-template-columns: 200px 1fr;
-    gap: 24px;
-    margin-bottom: 36px;
-  }
+  .stats-row { display: grid; grid-template-columns: 200px 1fr; gap: 24px; margin-bottom: 36px; }
 
   /* Donut Chart */
   .donut-wrap {
-    background: var(--surface);
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
-    padding: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: var(--surface); border-radius: var(--radius);
+    border: 1px solid var(--border); padding: 24px;
+    display: flex; align-items: center; justify-content: center;
   }
-  .donut {
-    position: relative;
-    width: 140px;
-    height: 140px;
-  }
+  .donut { position: relative; width: 140px; height: 140px; }
   .donut svg { transform: rotate(-90deg); }
   .donut-center {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
   }
   .donut-pct { font-size: 32px; font-weight: 700; font-family: var(--mono); line-height: 1; }
   .donut-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
 
   /* Stat Cards */
-  .stat-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 12px;
-  }
+  .stat-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
   .stat-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 18px 20px;
-    position: relative;
-    overflow: hidden;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 20px;
+    position: relative; overflow: hidden;
   }
-  .stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 3px;
-  }
+  .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
   .stat-card.total::before { background: var(--accent); }
   .stat-card.pass::before { background: var(--green); }
   .stat-card.fail::before { background: var(--red); }
@@ -157,91 +130,78 @@
   .stat-card.skip .stat-value { color: var(--amber); }
 
   /* ─── Device Info ─── */
-  .device-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 36px;
-  }
+  .device-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 36px; }
   .device-panel {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px 24px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px 24px;
   }
   .device-panel h3 {
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: var(--accent);
-    margin-bottom: 14px;
-    padding-bottom: 10px;
+    font-size: 12px; text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--accent); margin-bottom: 14px; padding-bottom: 10px;
     border-bottom: 1px solid var(--border);
   }
-  .info-row { display: flex; padding: 5px 0; font-size: 13px; }
-  .info-label { color: var(--text-dim); width: 130px; flex-shrink: 0; }
+  .info-row { display: flex; padding: 5px 0; font-size: 13px; gap: 8px; }
+  .info-label { color: var(--text-dim); min-width: 110px; flex-shrink: 0; }
   .info-value { color: var(--text); font-family: var(--mono); font-size: 12px; word-break: break-all; }
 
   /* ─── Section Header ─── */
   .section-title {
-    font-size: 14px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1.5px;
-    color: var(--text-dim);
-    margin-bottom: 16px;
-    padding-bottom: 10px;
+    font-size: 14px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1.5px; color: var(--text-dim);
+    margin-bottom: 16px; padding-bottom: 10px;
     border-bottom: 1px solid var(--border);
   }
 
+  /* ─── Filter Bar ─── */
+  .filter-bar {
+    display: flex; gap: 8px; margin-bottom: 20px; align-items: center; flex-wrap: wrap;
+  }
+  .filter-btn {
+    font-family: var(--mono); font-size: 12px; font-weight: 600;
+    padding: 5px 14px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text-dim); cursor: pointer;
+    transition: all .15s;
+  }
+  .filter-btn:hover { border-color: var(--accent); color: var(--text); }
+  .filter-btn.active { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
+  .filter-btn.f-fail.active { border-color: var(--red); background: var(--red-bg); color: var(--red); }
+  .filter-btn.f-skip.active { border-color: var(--amber); background: var(--amber-bg); color: var(--amber); }
+  .filter-btn.f-pass.active { border-color: var(--green); background: var(--green-bg); color: var(--green); }
+  .filter-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-right: 4px; }
+
   /* ─── Subsystem Summary Grid ─── */
   .subsystem-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 12px;
-    margin-bottom: 40px;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px; margin-bottom: 40px;
   }
   .sub-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px 20px;
-    cursor: pointer;
-    transition: border-color .2s, transform .15s;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 20px;
+    cursor: pointer; transition: border-color .2s, transform .15s, box-shadow .2s;
     position: relative;
   }
   .sub-card:hover { border-color: var(--accent); transform: translateY(-1px); }
-  html { scroll-behavior: smooth; }
   .sub-card.s-pass { border-left: 3px solid var(--green); }
-  .sub-card.s-fail { border-left: 3px solid var(--red); }
+  .sub-card.s-fail {
+    border-left: 3px solid var(--red);
+    box-shadow: 0 0 20px rgba(248,113,113,.08), inset 0 0 30px rgba(248,113,113,.03);
+  }
   .sub-card .sub-name { font-size: 14px; font-weight: 600; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
   .sub-card .sub-badge {
-    font-size: 11px;
-    font-family: var(--mono);
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-weight: 600;
+    font-size: 11px; font-family: var(--mono);
+    padding: 2px 8px; border-radius: 10px; font-weight: 600;
   }
   .sub-card.s-pass .sub-badge { background: var(--green-bg); color: var(--green); }
   .sub-card.s-fail .sub-badge { background: var(--red-bg); color: var(--red); }
-  .sub-bar {
-    height: 6px;
-    border-radius: 3px;
-    background: var(--surface-3);
-    overflow: hidden;
-    display: flex;
-  }
+  .sub-bar { height: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; display: flex; }
   .sub-bar-pass { background: var(--green); }
   .sub-bar-fail { background: var(--red); }
   .sub-bar-skip { background: var(--amber); opacity: .6; }
   .sub-bar-error { background: var(--pink); }
   .sub-stats {
-    display: flex;
-    gap: 12px;
-    margin-top: 10px;
-    font-size: 12px;
-    font-family: var(--mono);
-    color: var(--text-dim);
+    display: flex; gap: 12px; margin-top: 10px;
+    font-size: 12px; font-family: var(--mono); color: var(--text-dim);
   }
   .sub-stats span { display: flex; align-items: center; gap: 4px; }
   .sub-stats .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
@@ -250,69 +210,51 @@
   .sub-stats .dot.a { background: var(--amber); }
 
   /* ─── Detail Tables ─── */
-  .cat-section { margin-bottom: 24px; }
+  .cat-section { margin-bottom: 16px; }
   .cat-section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    display: flex; justify-content: space-between; align-items: center;
     padding: 12px 20px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
+    background: var(--surface-2); border: 1px solid var(--border);
     border-radius: var(--radius) var(--radius) 0 0;
-    cursor: pointer;
-    user-select: none;
-    transition: background .15s;
+    cursor: pointer; user-select: none; transition: background .15s;
   }
   .cat-section-header:hover { background: var(--surface-3); }
   .cat-section-header h3 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .cat-section-header .cat-count { font-family: var(--mono); font-size: 12px; color: var(--text-dim); margin-left: 4px; }
   .cat-section-header .chevron {
-    color: var(--text-muted);
-    transition: transform .2s;
-    font-size: 12px;
+    color: var(--text-muted); transition: transform .2s; font-size: 12px;
   }
   .cat-section.collapsed .chevron { transform: rotate(-90deg); }
   .cat-section.collapsed .cat-table-wrap { display: none; }
 
   .cat-table-wrap {
-    border: 1px solid var(--border);
-    border-top: none;
-    border-radius: 0 0 var(--radius) var(--radius);
-    overflow: hidden;
+    border: 1px solid var(--border); border-top: none;
+    border-radius: 0 0 var(--radius) var(--radius); overflow: hidden;
   }
 
   table { width: 100%; border-collapse: collapse; }
   th {
-    background: var(--surface-3);
-    color: var(--text-dim);
-    padding: 10px 16px;
-    text-align: left;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-weight: 600;
+    background: var(--surface-3); color: var(--text-dim);
+    padding: 10px 16px; text-align: left;
+    font-size: 11px; text-transform: uppercase;
+    letter-spacing: 1px; font-weight: 600;
     border-bottom: 1px solid var(--border);
   }
   td {
-    padding: 10px 16px;
-    border-bottom: 1px solid rgba(51,56,72,.5);
-    font-size: 13px;
-    vertical-align: top;
+    padding: 10px 16px; border-bottom: 1px solid rgba(51,56,72,.5);
+    font-size: 13px; vertical-align: top;
   }
   tr:last-child td { border-bottom: none; }
   tr:hover td { background: rgba(108,140,255,.03); }
+  tr.hidden-by-filter { display: none; }
   td.id-col { font-family: var(--mono); font-size: 12px; color: var(--text-dim); white-space: nowrap; }
   td.dur-col { font-family: var(--mono); font-size: 12px; color: var(--text-dim); white-space: nowrap; }
   td.msg-col { font-size: 12px; color: var(--text-dim); max-width: 400px; word-break: break-word; }
 
   .status {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-family: var(--mono);
-    font-size: 12px;
-    font-weight: 600;
-    padding: 3px 10px;
-    border-radius: 6px;
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--mono); font-size: 12px; font-weight: 600;
+    padding: 3px 10px; border-radius: 6px;
   }
   .status.s-PASS { color: var(--green); background: var(--green-bg); }
   .status.s-FAIL { color: var(--red); background: var(--red-bg); }
@@ -324,13 +266,10 @@
 
   /* ─── Footer ─── */
   footer {
-    margin-top: 48px;
-    padding-top: 20px;
+    margin-top: 48px; padding-top: 20px;
     border-top: 1px solid var(--border);
-    font-size: 12px;
-    color: var(--text-muted);
-    display: flex;
-    justify-content: space-between;
+    font-size: 12px; color: var(--text-muted);
+    display: flex; justify-content: space-between;
   }
 
   /* ─── Animations ─── */
@@ -339,36 +278,29 @@
   .d1 { animation-delay: .05s } .d2 { animation-delay: .1s } .d3 { animation-delay: .15s }
   .d4 { animation-delay: .2s } .d5 { animation-delay: .25s } .d6 { animation-delay: .3s }
 
-  /* Back to top */
+  /* ─── Back to top ─── */
   .back-to-top {
-    position: fixed;
-    bottom: 32px;
-    right: 32px;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    font-size: 18px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    pointer-events: none;
+    position: fixed; bottom: 32px; right: 32px;
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--surface-2); border: 1px solid var(--border);
+    color: var(--text-dim); font-size: 18px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
     transition: opacity .25s, background .15s, transform .15s;
     z-index: 100;
   }
   .back-to-top.visible { opacity: 1; pointer-events: auto; }
   .back-to-top:hover { background: var(--accent); color: #fff; transform: translateY(-2px); }
 
-  @media (max-width: 768px) {
+  @media (max-width: 900px) {
     .container { padding: 20px; }
     .stats-row { grid-template-columns: 1fr; }
     .device-grid { grid-template-columns: 1fr; }
     .subsystem-grid { grid-template-columns: 1fr 1fr; }
     header { flex-direction: column; gap: 12px; }
+  }
+  @media (max-width: 500px) {
+    .subsystem-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -377,12 +309,15 @@
 <div class="container">
   <!-- Header -->
   <header class="animate-in">
-    <div>
-      <h1><span>///</span> {{ suite_name }}</h1>
-      <div class="header-meta">
-        <span>{{ device_name }}</span>
-        <span class="sep">/</span>
-        <span>{{ timestamp }}</span>
+    <div class="header-left">
+      <div class="header-icon">&#x2691;</div>
+      <div>
+        <h1>{{ suite_name }}</h1>
+        <div class="header-meta">
+          <span>{{ device_name }}</span>
+          <span class="sep">/</span>
+          <span>{{ timestamp }}</span>
+        </div>
       </div>
     </div>
     <div class="header-right">
@@ -400,16 +335,26 @@
     <div class="donut-wrap">
       <div class="donut">
         {% set pct = ((passed / total * 100) | round) if total > 0 else 0 %}
+        {% set fail_pct = (((failed + error) / total * 100) | round) if total > 0 else 0 %}
+        {% set skip_pct = ((skipped / total * 100) | round) if total > 0 else 0 %}
         {% set circ = 408 %}
         <svg width="140" height="140" viewBox="0 0 140 140">
           <circle cx="70" cy="70" r="65" fill="none" stroke="var(--surface-3)" stroke-width="10"/>
+          {% if passed %}
           <circle cx="70" cy="70" r="65" fill="none" stroke="var(--green)" stroke-width="10"
             stroke-dasharray="{{ (pct / 100 * circ)|round }} {{ circ }}"
             stroke-linecap="round"/>
+          {% endif %}
           {% if failed + error > 0 %}
           <circle cx="70" cy="70" r="65" fill="none" stroke="var(--red)" stroke-width="10"
-            stroke-dasharray="{{ ((failed + error) / total * circ)|round }} {{ circ }}"
+            stroke-dasharray="{{ (fail_pct / 100 * circ)|round }} {{ circ }}"
             stroke-dashoffset="-{{ (pct / 100 * circ)|round }}"
+            stroke-linecap="round"/>
+          {% endif %}
+          {% if skipped > 0 %}
+          <circle cx="70" cy="70" r="65" fill="none" stroke="var(--amber)" stroke-width="10" opacity="0.6"
+            stroke-dasharray="{{ (skip_pct / 100 * circ)|round }} {{ circ }}"
+            stroke-dashoffset="-{{ ((pct + fail_pct) / 100 * circ)|round }}"
             stroke-linecap="round"/>
           {% endif %}
         </svg>
@@ -440,14 +385,14 @@
     </div>
     <div class="device-panel">
       <h3>Software</h3>
-      {% for key, label in [("android_version", "Android Version"), ("sdk_version", "SDK Level"), ("security_patch", "Security Patch"), ("build_id", "Build ID"), ("build_type", "Build Type"), ("gms_version", "GMS Version"), ("build_fingerprint", "Fingerprint"), ("kernel_version", "Kernel")] %}
+      {% for key, label in [("android_version", "Android"), ("sdk_version", "SDK Level"), ("security_patch", "Security Patch"), ("build_id", "Build ID"), ("build_type", "Build Type"), ("gms_version", "GMS"), ("kernel_version", "Kernel")] %}
       {% if device_info.get(key) %}
       <div class="info-row"><span class="info-label">{{ label }}</span><span class="info-value">{{ device_info[key] }}</span></div>
       {% endif %}{% endfor %}
     </div>
     <div class="device-panel">
       <h3>Component Firmware</h3>
-      {% for key, label in [("fw_wwan", "WWAN Version"), ("fw_wwan_date", "WWAN Build Date"), ("fw_touch", "Touch Controller"), ("fw_keypad", "Keypad MCU")] %}
+      {% for key, label in [("fw_wwan", "WWAN Version"), ("fw_wwan_date", "WWAN Build Date"), ("fw_touch", "Touch"), ("fw_keypad", "Keypad MCU")] %}
       {% if device_info.get(key) %}
       <div class="info-row"><span class="info-label">{{ label }}</span><span class="info-value">{{ device_info[key] }}</span></div>
       {% endif %}{% endfor %}
@@ -456,11 +401,11 @@
   {% endif %}
 
   {% if has_categories and categories %}
-  <!-- Subsystem Summary -->
+  <!-- Subsystem Summary (failed first) -->
   <div class="section-title animate-in d3">Subsystem Overview</div>
   <div class="subsystem-grid animate-in d3">
-    {% for cat in categories %}
-    <div class="sub-card {{ 's-pass' if cat.status == 'PASS' else 's-fail' }}" onclick="jumpToSection('sec-{{ loop.index }}')">
+    {% for cat in categories|sort(attribute='status', reverse=true) %}
+    <div class="sub-card {{ 's-pass' if cat.status == 'PASS' else 's-fail' }}" onclick="jumpToSection('sec-{{ cat.name|replace(' ','_') }}')">
       <div class="sub-name">
         {{ cat.name }}
         <span class="sub-badge">{{ cat.passed }}/{{ cat.total }}</span>
@@ -480,16 +425,26 @@
     {% endfor %}
   </div>
 
-  <!-- Detailed Results -->
+  <!-- Filter Bar -->
   <div class="section-title animate-in d4">Detailed Results</div>
+  <div class="filter-bar animate-in d4">
+    <span class="filter-label">Filter:</span>
+    <button class="filter-btn active" onclick="filterTests('all')">All</button>
+    <button class="filter-btn f-fail" onclick="filterTests('FAIL')">Failed</button>
+    <button class="filter-btn f-skip" onclick="filterTests('SKIP')">Skipped</button>
+    <button class="filter-btn f-pass" onclick="filterTests('PASS')">Passed</button>
+  </div>
+
+  <!-- Detailed Results (failed sections expanded, passed collapsed) -->
   {% for cat in categories %}
-  <div class="cat-section animate-in d5" id="sec-{{ loop.index }}">
-    <div class="cat-section-header" onclick="toggleSection('sec-{{ loop.index }}')">
+  <div class="cat-section {{ 'collapsed' if cat.status == 'PASS' else '' }}" id="sec-{{ cat.name|replace(' ','_') }}">
+    <div class="cat-section-header" onclick="toggleSection('sec-{{ cat.name|replace(' ','_') }}')">
       <h3>
         <span class="status {{ 's-PASS' if cat.status == 'PASS' else 's-FAIL' }}">
           {{ '✓' if cat.status == 'PASS' else '✗' }}
         </span>
         {{ cat.name }}
+        <span class="cat-count">{{ cat.passed }}/{{ cat.total }}</span>
       </h3>
       <span class="chevron">▼</span>
     </div>
@@ -497,7 +452,7 @@
       <table>
         <tr><th>ID</th><th>Test</th><th>Status</th><th>Duration</th><th>Message</th></tr>
         {% for r in cat.tests %}
-        <tr>
+        <tr data-status="{{ r.status }}">
           <td class="id-col">{{ r.id }}</td>
           <td>{{ r.name }}</td>
           <td><span class="status s-{{ r.status }}">{{ r.status }}</span></td>
@@ -513,11 +468,18 @@
   {% else %}
   <!-- Flat table fallback -->
   <div class="section-title animate-in d3">Test Results</div>
+  <div class="filter-bar animate-in d3">
+    <span class="filter-label">Filter:</span>
+    <button class="filter-btn active" onclick="filterTests('all')">All</button>
+    <button class="filter-btn f-fail" onclick="filterTests('FAIL')">Failed</button>
+    <button class="filter-btn f-skip" onclick="filterTests('SKIP')">Skipped</button>
+    <button class="filter-btn f-pass" onclick="filterTests('PASS')">Passed</button>
+  </div>
   <div class="flat-table animate-in d4">
     <table>
       <tr><th>ID</th><th>Test</th><th>Status</th><th>Duration</th><th>Message</th></tr>
       {% for r in results %}
-      <tr>
+      <tr data-status="{{ r.status }}">
         <td class="id-col">{{ r.id }}</td>
         <td>{{ r.name }}</td>
         <td><span class="status s-{{ r.status }}">{{ r.status }}</span></td>
@@ -543,8 +505,33 @@ function toggleSection(id) {
 }
 function jumpToSection(id) {
   var el = document.getElementById(id);
+  if (!el) return;
   el.classList.remove('collapsed');
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function filterTests(status) {
+  // Update active button
+  document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+  event.target.classList.add('active');
+  // Filter rows
+  document.querySelectorAll('tr[data-status]').forEach(function(row) {
+    if (status === 'all') {
+      row.classList.remove('hidden-by-filter');
+    } else if (status === 'FAIL') {
+      row.classList.toggle('hidden-by-filter', row.dataset.status !== 'FAIL' && row.dataset.status !== 'ERROR');
+    } else {
+      row.classList.toggle('hidden-by-filter', row.dataset.status !== status);
+    }
+  });
+  // Expand sections that have visible rows, collapse those that don't
+  document.querySelectorAll('.cat-section').forEach(function(sec) {
+    var visibleRows = sec.querySelectorAll('tr[data-status]:not(.hidden-by-filter)');
+    if (status !== 'all' && visibleRows.length === 0) {
+      sec.classList.add('collapsed');
+    } else if (status !== 'all') {
+      sec.classList.remove('collapsed');
+    }
+  });
 }
 window.addEventListener('scroll', function() {
   document.getElementById('btt').classList.toggle('visible', window.scrollY > 400);
