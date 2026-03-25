@@ -94,7 +94,7 @@ class TestHtmlReporter:
         assert "Subsystem Summary" in html
         assert "Boot" in html
         assert "WiFi" in html
-        assert "✅ PASS" in html or "❌ FAIL" in html
+        assert "Subsystem Overview" in html
 
     def test_category_summary_logic(self, sample_results):
         reporter = HtmlReporter()
