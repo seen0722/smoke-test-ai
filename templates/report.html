@@ -271,6 +271,57 @@
   td.dur-col { font-family: var(--mono); font-size: 12px; color: var(--text-dim); white-space: nowrap; }
   td.msg-col { font-size: 12px; color: var(--text-dim); max-width: 400px; word-break: break-word; }
 
+  /* Detail expand */
+  tr.has-detail { cursor: pointer; }
+  tr.has-detail td:first-child { position: relative; }
+  tr.has-detail td:first-child::before {
+    content: '▸';
+    position: absolute;
+    left: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 10px;
+    transition: transform .2s, color .2s;
+  }
+  tr.has-detail.expanded td:first-child::before {
+    transform: translateY(-50%) rotate(90deg);
+    color: var(--accent);
+  }
+  tr.has-detail:hover td { background: rgba(108,140,255,.04); }
+
+  tr.detail-row { display: none; }
+  tr.detail-row.show { display: table-row; }
+  tr.detail-row td {
+    padding: 0 16px 14px 40px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    border-left: 2px solid var(--accent);
+  }
+  .detail-content {
+    display: flex;
+    gap: 32px;
+    padding: 10px 16px;
+    background: rgba(108,140,255,.03);
+    border-radius: 6px;
+    font-size: 12px;
+  }
+  .detail-item { display: flex; flex-direction: column; gap: 3px; }
+  .detail-label {
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 9px;
+    letter-spacing: 1px;
+  }
+  .detail-value {
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    word-break: break-all;
+    line-height: 1.5;
+  }
+
   .status {
     display: inline-flex; align-items: center; gap: 5px;
     font-family: var(--mono); font-size: 12px; font-weight: 600;
@@ -487,13 +538,31 @@
       <table>
         <tr><th>ID</th><th>Test</th><th>Status</th><th>Duration</th><th>Message</th></tr>
         {% for r in cat.tests %}
-        <tr data-status="{{ r.status }}">
+        <tr data-status="{{ r.status }}" {% if r.procedure %}class="has-detail" onclick="toggleDetail('d-{{ r.id }}', this)"{% endif %}>
           <td class="id-col">{{ r.id }}</td>
           <td>{{ r.name }}</td>
           <td><span class="status s-{{ r.status }}">{{ r.status }}</span></td>
           <td class="dur-col">{{ "%.2f"|format(r.duration) }}s</td>
           <td class="msg-col">{{ r.message }}</td>
         </tr>
+        {% if r.procedure %}
+        <tr class="detail-row" id="d-{{ r.id }}">
+          <td colspan="5">
+            <div class="detail-content">
+              <div class="detail-item">
+                <span class="detail-label">Procedure</span>
+                <span class="detail-value">{{ r.procedure }}</span>
+              </div>
+              {% if r.criteria %}
+              <div class="detail-item">
+                <span class="detail-label">Pass Criteria</span>
+                <span class="detail-value">{{ r.criteria }}</span>
+              </div>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endif %}
         {% endfor %}
       </table>
     </div>
@@ -535,6 +604,13 @@
 <button class="back-to-top" id="btt" onclick="window.scrollTo({top:0,behavior:'smooth'})" title="Back to top">&#x2191;</button>
 
 <script>
+function toggleDetail(id, row) {
+  var el = document.getElementById(id);
+  if (el) {
+    el.classList.toggle('show');
+    if (row) row.classList.toggle('expanded');
+  }
+}
 function toggleSection(id) {
   document.getElementById(id).classList.toggle('collapsed');
 }

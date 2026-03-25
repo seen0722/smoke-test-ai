@@ -21,6 +21,7 @@ class HtmlReporter:
         output_path: Path,
         device_info: dict | None = None,
         category_map: dict | None = None,
+        test_config_map: dict | None = None,
     ) -> None:
         passed = sum(1 for r in results if r.status == TestStatus.PASS)
         failed = sum(1 for r in results if r.status == TestStatus.FAIL)
@@ -29,7 +30,8 @@ class HtmlReporter:
 
         # Build category summary and grouped results
         category_map = category_map or {}
-        categories = self._build_category_summary(results, category_map)
+        test_config_map = test_config_map or {}
+        categories = self._build_category_summary(results, category_map, test_config_map)
 
         template = self.env.get_template("report.html")
         html = template.render(
@@ -50,11 +52,47 @@ class HtmlReporter:
         output_path.write_text(html)
 
     @staticmethod
+    def _build_procedure(tc: dict) -> str:
+        """Extract human-readable procedure from test config."""
+        test_type = tc.get("type", "")
+        if test_type in ("adb_check", "adb_shell"):
+            return tc.get("command", "")
+        if test_type == "screenshot_llm":
+            return f"Screenshot + LLM: {tc.get('prompt', '')}"
+        # Plugin types
+        action = tc.get("action", "")
+        params = tc.get("params", {})
+        if action:
+            parts = [f"{test_type}.{action}"]
+            for k, v in params.items():
+                parts.append(f"{k}={v}")
+            return " | ".join(parts)
+        return test_type
+
+    @staticmethod
+    def _build_criteria(tc: dict) -> str:
+        """Extract human-readable pass criteria from test config."""
+        if tc.get("expected"):
+            return f"== \"{tc['expected']}\""
+        if tc.get("expected_pattern"):
+            return f"match /{tc['expected_pattern']}/"
+        if tc.get("expected_contains"):
+            return f"contains \"{tc['expected_contains']}\""
+        if tc.get("expected_not_contains"):
+            return f"not contains \"{tc['expected_not_contains']}\""
+        # Plugin: infer from action
+        action = tc.get("action", "")
+        if action:
+            return f"{action} succeeds"
+        return ""
+
+    @staticmethod
     def _build_category_summary(
-        results: list[TestResult], category_map: dict
+        results: list[TestResult], category_map: dict, test_config_map: dict | None = None
     ) -> list[dict]:
         """Group results by category and compute per-category stats."""
-        # Preserve insertion order from category_map
+        test_config_map = test_config_map or {}
+
         seen_order = []
         for r in results:
             cat = category_map.get(r.id, "Other")
@@ -69,6 +107,10 @@ class HtmlReporter:
             cat = category_map.get(r.id, "Other")
             rd = r.to_dict()
             rd["category"] = cat
+            # Enrich with procedure and criteria
+            tc = test_config_map.get(r.id, {})
+            rd["procedure"] = HtmlReporter._build_procedure(tc) if tc else ""
+            rd["criteria"] = HtmlReporter._build_criteria(tc) if tc else ""
             groups[cat].append(rd)
 
         categories = []

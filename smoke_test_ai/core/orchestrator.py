@@ -623,19 +623,28 @@ class Orchestrator:
 
         if llm_tests > 0:
             llm_ok = False
+            llm_err = ""
             try:
                 llm = self._get_llm_client()
-                if llm and hasattr(llm, "health_check"):
-                    llm_ok = llm.health_check()
-                elif llm:
-                    # Quick test: just check if client is configured
-                    llm_ok = bool(llm.base_url)
-            except Exception:
-                pass
+                if llm:
+                    # Actually test the API with a minimal request
+                    import httpx
+                    resp = httpx.post(
+                        f"{llm.base_url}/chat/completions",
+                        headers={"Authorization": f"Bearer {llm.api_key}"},
+                        json={"model": llm.model, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1},
+                        timeout=10,
+                    )
+                    llm_ok = resp.status_code == 200
+                    if not llm_ok:
+                        llm_err = f"{resp.status_code} {resp.reason_phrase}"
+            except Exception as e:
+                llm_err = str(e)[:60]
+            msg = "Available" if llm_ok else f"Not available ({llm_err}) — {llm_tests} test(s) will ERROR"
             checks.append({
                 "name": "LLM API",
                 "level": "OK" if llm_ok else "WARNING",
-                "message": "Available" if llm_ok else f"Not available — {llm_tests} test(s) will ERROR",
+                "message": msg,
                 "affected": llm_tests,
             })
 
@@ -721,14 +730,16 @@ class Orchestrator:
             logger.info(f"JSON report: file://{json_path.resolve()}")
 
         if "html" in formats:
-            # Build category map from suite config
+            # Build category map and test config map from suite config
             category_map = {}
+            test_config_map = {}
             if suite_config:
                 for tc in suite_config.get("test_suite", {}).get("tests", []):
                     category_map[tc["id"]] = tc.get("category", "Other")
+                    test_config_map[tc["id"]] = tc
 
             html_path = output_dir / f"{self.device_name}_report.html"
-            HtmlReporter().generate(results, "Smoke Test", self.device_name, html_path, device_info, category_map)
+            HtmlReporter().generate(results, "Smoke Test", self.device_name, html_path, device_info, category_map, test_config_map)
             logger.info(f"HTML report: file://{html_path.resolve()}")
 
             if getattr(self, "_suite_config", None):
