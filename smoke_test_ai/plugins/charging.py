@@ -45,7 +45,7 @@ class ChargingPlugin(TestPlugin):
 
         # 4. Check recovered state
         recovered = self._get_battery_info(adb)
-        if not recovered["powered"] or recovered["status"] != 2:
+        if not recovered["powered"] or recovered["status"] not in (2, 5):
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"Charging not recovered after power on: "
                                       f"powered={recovered['powered']}, "

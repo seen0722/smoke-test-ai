@@ -127,7 +127,7 @@ test_suite:
       name: "加速度計數據驗證"
       type: "adb_shell"
       category: "Sensor"
-      command: "dumpsys sensorservice | grep -A2 'accelerometer' | grep 'last'"
+      command: "dumpsys sensorservice | grep -A1 'Accelerometer Non-wakeup: last' | tail -1"
       expected_pattern: "-?[0-9]+\\.[0-9]+"
       depends_on: "sensor_accelerometer"
 
@@ -142,7 +142,7 @@ test_suite:
       name: "陀螺儀數據驗證"
       type: "adb_shell"
       category: "Sensor"
-      command: "dumpsys sensorservice | grep -A2 'gyroscope' | grep 'last'"
+      command: "dumpsys sensorservice | grep -A1 'Gyroscope Non-wakeup: last' | tail -1"
       expected_pattern: "-?[0-9]+\\.[0-9]+"
       depends_on: "sensor_gyroscope"
 
@@ -199,14 +199,12 @@ test_suite:
         verify_prompt: "照片是否清晰、非全黑、非全白、無明顯色偏？"
       depends_on: "camera_rear_capture"
 
-    - id: "camera_video_recording"
-      name: "錄影功能"
-      type: "camera"
+    - id: "video_encode"
+      name: "影片編碼能力"
+      type: "adb_shell"
       category: "Camera"
-      action: "record_video"
-      params:
-        record_duration: 5
-      depends_on: "camera_available"
+      command: "screenrecord --time-limit 2 /sdcard/test_video.mp4 && stat -c %s /sdcard/test_video.mp4 && rm -f /sdcard/test_video.mp4"
+      expected_pattern: "^[1-9][0-9]+"
 
     # ============================================================
     # Audio

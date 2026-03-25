@@ -33,25 +33,36 @@ class SuspendPlugin(TestPlugin):
         logger.info("Initiating ADB reboot...")
         adb.shell("reboot")
 
-        # 2. Wait for device to disconnect and reconnect
-        time.sleep(10)
+        # 2. Wait for device to disconnect first
+        logger.info("Waiting for device to disconnect...")
+        for _ in range(30):
+            time.sleep(1)
+            if not adb.is_connected():
+                logger.info("Device disconnected")
+                break
 
+        # 3. Wait for device to reconnect
+        time.sleep(5)
         if not adb.wait_for_device(timeout=boot_timeout):
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"Device not found via ADB after reboot "
                                       f"(timeout: {boot_timeout}s)")
 
-        # 3. Verify boot completed
-        time.sleep(5)
-        result = adb.shell("getprop sys.boot_completed")
-        boot_out = result.stdout if hasattr(result, "stdout") else str(result)
+        # 4. Wait for boot to fully complete (poll sys.boot_completed)
+        logger.info("Device reconnected, waiting for boot to complete...")
+        for _ in range(60):
+            try:
+                result = adb.shell("getprop sys.boot_completed")
+                boot_out = result.stdout if hasattr(result, "stdout") else str(result)
+                if boot_out.strip() == "1":
+                    return TestResult(id=tid, name=tname, status=TestStatus.PASS,
+                                      message="ADB reboot + boot completed OK")
+            except Exception:
+                pass
+            time.sleep(2)
 
-        if boot_out.strip() != "1":
-            return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
-                              message=f"Boot not completed after reboot: {boot_out.strip()}")
-
-        return TestResult(id=tid, name=tname, status=TestStatus.PASS,
-                          message="ADB reboot + boot completed OK")
+        return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                          message="Boot not completed after reboot (timeout)")
 
     def _deep_sleep(self, tc: dict, ctx: PluginContext) -> TestResult:
         tid, tname = tc["id"], tc["name"]
