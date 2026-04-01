@@ -512,7 +512,10 @@
     <div class="device-panel">
       <h3>Release (CI)</h3>
       {% for key, val in bi.release.items() %}
-      <div class="info-row"><span class="info-label">{{ key }}</span><span class="info-value">{{ val }}</span></div>
+      <div class="info-row">
+        <span class="info-label">{{ key }}</span>
+        <span class="info-value">{% if val is string and (val.startswith('http://') or val.startswith('https://')) %}<a href="{{ val }}" target="_blank" style="color: var(--accent); text-decoration: none;">{{ val }}</a>{% else %}{{ val }}{% endif %}</span>
+      </div>
       {% endfor %}
     </div>
     {% endif %}
@@ -543,10 +546,11 @@
       {% endif %}
     </div>
     <table class="build-val-table">
-      <tr><th>Property</th><th>Expected (CI)</th><th>Actual (Device)</th><th>Mode</th><th>Result</th></tr>
+      <tr><th>Category</th><th>Name</th><th>Expected (CI)</th><th>Actual (Device)</th><th>Mode</th><th>Result</th></tr>
       {% for v in bv %}
       <tr class="{{ 'bv-mismatch' if not v.match else '' }}">
-        <td class="id-col">{{ v.property }}</td>
+        <td style="font-size: 12px; color: var(--text-dim);">{{ v.get('category', '') }}</td>
+        <td>{{ v.property }}</td>
         <td class="detail-value">{{ v.expected }}</td>
         <td class="detail-value">{{ v.actual }}</td>
         <td style="font-family: var(--mono); font-size: 11px; color: var(--text-muted);">{{ v.get('mode', 'exact') }}</td>
