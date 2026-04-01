@@ -560,12 +560,13 @@
       {% endif %}
     </div>
     <table class="build-val-table">
-      <tr><th>Property</th><th>Expected (CI)</th><th>Actual (Device)</th><th>Result</th></tr>
+      <tr><th>Property</th><th>Expected (CI)</th><th>Actual (Device)</th><th>Mode</th><th>Result</th></tr>
       {% for v in bv %}
       <tr class="{{ 'bv-mismatch' if not v.match else '' }}">
         <td class="id-col">{{ v.property }}</td>
         <td class="detail-value">{{ v.expected }}</td>
         <td class="detail-value">{{ v.actual }}</td>
+        <td style="font-family: var(--mono); font-size: 11px; color: var(--text-muted);">{{ v.get('mode', 'exact') }}</td>
         <td>
           {% if v.match %}
             <span class="status s-PASS">MATCH</span>

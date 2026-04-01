@@ -28,6 +28,8 @@
     "ro.build.version.security_patch": "2026-02-05",
     "ro.product.model": "T70",
     "ro.product.brand": "Trimble",
-    "ro.boot.hardware": "qcom"
+    "ro.boot.hardware": "qcom",
+    "ro.build.fingerprint": "Trimble/thorpe/thorpe:15/02.01.05.260226/release-keys:user/release-keys",
+    "ro.com.google.gmsversion": "15_202501"
   }
 }

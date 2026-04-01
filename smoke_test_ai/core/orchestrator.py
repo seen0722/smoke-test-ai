@@ -596,41 +596,82 @@ class Orchestrator:
 
         return results
 
+    # Auto-mapping: build_info section fields → ADB commands + match mode
+    _PLATFORM_MAP = {
+        "android_version": ("getprop ro.build.version.release", "exact"),
+        "security_patch_level": ("getprop ro.build.version.security_patch", "exact"),
+        "kernel_version": ("uname -r", "contains"),
+    }
+    _FIRMWARE_MAP = {
+        "wwan": ("getprop gsm.version.baseband", "contains"),
+        "touch": ("cat /sys/devices/platform/soc/a94000.i2c/i2c-5/5-002a/fw_version 2>/dev/null", "exact"),
+        "keypad_mcu": ("cat /sys/devices/platform/soc/98c000.i2c/i2c-2/2-0012/fw 2>/dev/null", "exact"),
+    }
+
     def _validate_build_info(self, adb, build_info: dict) -> list[dict]:
-        """Validate device properties against CI build info expected values."""
+        """Validate device against CI build info: expected_props + platform + firmware."""
         logger.info("=== Build Info Validation ===")
         results = []
 
+        # 1. Validate expected_props (strict exact match)
         expected_props = build_info.get("expected_props", {})
         for prop, expected_val in expected_props.items():
-            actual_result = adb.shell(f"getprop {prop}")
-            actual = (actual_result.stdout if hasattr(actual_result, "stdout") else str(actual_result)).strip()
+            actual = self._adb_output(adb, f"getprop {prop}")
+            results.append(self._build_val_entry(prop, expected_val, actual, "exact"))
 
-            match = actual == expected_val
-            entry = {
-                "property": prop,
-                "expected": expected_val,
-                "actual": actual,
-                "match": match,
-            }
-            results.append(entry)
+        # 2. Auto-validate platform section
+        platform = build_info.get("platform", {})
+        for key, (cmd, mode) in self._PLATFORM_MAP.items():
+            if key in platform:
+                actual = self._adb_output(adb, cmd)
+                results.append(self._build_val_entry(
+                    f"platform.{key}", platform[key], actual, mode))
 
-            icon = "✓" if match else "✗"
-            level = "OK" if match else "MISMATCH"
-            logger.info(f"  [{icon}] {level:8s} {prop}")
-            if not match:
-                logger.warning(f"           expected: {expected_val}")
-                logger.warning(f"           actual:   {actual}")
+        # 3. Auto-validate firmware section
+        firmware = build_info.get("firmware", {})
+        for key, (cmd, mode) in self._FIRMWARE_MAP.items():
+            if key in firmware:
+                actual = self._adb_output(adb, cmd)
+                results.append(self._build_val_entry(
+                    f"firmware.{key}", firmware[key], actual, mode))
+
+        # Log summary
+        for r in results:
+            icon = "✓" if r["match"] else "✗"
+            level = "OK" if r["match"] else "MISMATCH"
+            logger.info(f"  [{icon}] {level:8s} {r['property']}")
+            if not r["match"]:
+                logger.warning(f"           expected: {r['expected']}")
+                logger.warning(f"           actual:   {r['actual']}")
 
         passed = sum(1 for r in results if r["match"])
         total = len(results)
         if total > 0:
             if passed == total:
-                logger.info(f"Build info: all {total} properties match")
+                logger.info(f"Build validation: all {total} checks passed")
             else:
-                logger.warning(f"Build info: {total - passed}/{total} properties MISMATCH")
+                logger.warning(f"Build validation: {total - passed}/{total} MISMATCH")
 
         return results
+
+    @staticmethod
+    def _adb_output(adb, cmd: str) -> str:
+        result = adb.shell(cmd)
+        return (result.stdout if hasattr(result, "stdout") else str(result)).strip()
+
+    @staticmethod
+    def _build_val_entry(prop: str, expected: str, actual: str, mode: str) -> dict:
+        if mode == "contains":
+            match = expected in actual
+        else:
+            match = actual == expected
+        return {
+            "property": prop,
+            "expected": expected,
+            "actual": actual,
+            "match": match,
+            "mode": mode,
+        }
 
     def _capture_bugreport_and_analyze(self, adb) -> dict | None:
         """Capture bugreport and analyze for crashes during test execution."""
