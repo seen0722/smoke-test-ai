@@ -361,6 +361,7 @@ class Orchestrator:
         build_type: str | None = None,
         keep_data: bool = False,
         is_factory_reset: bool = False,
+        build_info: dict | None = None,
     ) -> list[TestResult]:
         adb = AdbController(serial=serial)
 
@@ -509,6 +510,12 @@ class Orchestrator:
             device_info["fw_wwan"] = parts[0]
             device_info["fw_wwan_date"] = parts[1]
 
+        # Build info validation
+        if build_info:
+            device_info["build_info"] = build_info
+            build_validation = self._validate_build_info(adb, build_info)
+            device_info["build_validation"] = build_validation
+
         # Resolve ${VAR} placeholders before test execution
         if suite_config:
             suite_config = self._resolve_variables(suite_config)
@@ -586,6 +593,42 @@ class Orchestrator:
         # Stage 4: Report
         logger.info("=== Stage 4: Report ===")
         self._generate_reports(results, device_info=device_info, suite_config=suite_config)
+
+        return results
+
+    def _validate_build_info(self, adb, build_info: dict) -> list[dict]:
+        """Validate device properties against CI build info expected values."""
+        logger.info("=== Build Info Validation ===")
+        results = []
+
+        expected_props = build_info.get("expected_props", {})
+        for prop, expected_val in expected_props.items():
+            actual_result = adb.shell(f"getprop {prop}")
+            actual = (actual_result.stdout if hasattr(actual_result, "stdout") else str(actual_result)).strip()
+
+            match = actual == expected_val
+            entry = {
+                "property": prop,
+                "expected": expected_val,
+                "actual": actual,
+                "match": match,
+            }
+            results.append(entry)
+
+            icon = "✓" if match else "✗"
+            level = "OK" if match else "MISMATCH"
+            logger.info(f"  [{icon}] {level:8s} {prop}")
+            if not match:
+                logger.warning(f"           expected: {expected_val}")
+                logger.warning(f"           actual:   {actual}")
+
+        passed = sum(1 for r in results if r["match"])
+        total = len(results)
+        if total > 0:
+            if passed == total:
+                logger.info(f"Build info: all {total} properties match")
+            else:
+                logger.warning(f"Build info: {total - passed}/{total} properties MISMATCH")
 
         return results
 

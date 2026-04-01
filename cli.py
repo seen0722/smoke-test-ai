@@ -21,8 +21,9 @@ def main():
 @click.option("--skip-setup", is_flag=True, help="Skip Setup Wizard stage")
 @click.option("--build-type", type=click.Choice(["user", "userdebug"]), default=None, help="Build type (overrides YAML)")
 @click.option("--keep-data", is_flag=True, help="Skip userdata flash (preserve existing data)")
+@click.option("--build-info", default=None, type=click.Path(exists=True), help="Build info JSON from CI (expected values)")
 @click.option("--config-dir", default="config", help="Config directory path")
-def run(device, suite, build, serial, skip_flash, skip_setup, build_type, keep_data, config_dir):
+def run(device, suite, build, serial, skip_flash, skip_setup, build_type, keep_data, build_info, config_dir):
     """Run full smoke test pipeline."""
     from smoke_test_ai.core.orchestrator import Orchestrator
 
@@ -32,6 +33,13 @@ def run(device, suite, build, serial, skip_flash, skip_setup, build_type, keep_d
     suite_config = load_test_suite(config_path / "test_suites" / f"{suite}.yaml")
 
     orch = Orchestrator(settings=settings, device_config=device_config)
+    # Load build info JSON if provided
+    build_info_data = None
+    if build_info:
+        import json
+        build_info_data = json.loads(Path(build_info).read_text())
+        console.print(f"[cyan]Build info loaded: {build_info}[/]")
+
     results = orch.run(
         serial=serial,
         suite_config=suite_config,
@@ -40,6 +48,7 @@ def run(device, suite, build, serial, skip_flash, skip_setup, build_type, keep_d
         skip_setup=skip_setup,
         build_type=build_type,
         keep_data=keep_data,
+        build_info=build_info_data,
         config_dir=str(config_path),
     )
 

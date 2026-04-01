@@ -335,6 +335,14 @@
   /* ─── Flat table fallback ─── */
   .flat-table { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
 
+  /* ─── Build Validation ─── */
+  .build-val { margin-bottom: 36px; }
+  .build-val-table { background: var(--surface); border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; }
+  .build-val-table td { font-size: 12px; }
+  tr.bv-mismatch td { background: rgba(248,113,113,.04); }
+  tr.bv-mismatch td:nth-child(2) { color: var(--green); }
+  tr.bv-mismatch td:nth-child(3) { color: var(--red); }
+
   /* ─── Crash Analysis ─── */
   .crash-summary { margin-bottom: 36px; }
   .crash-badge {
@@ -494,6 +502,80 @@
       <div class="info-row"><span class="info-label">{{ label }}</span><span class="info-value">{{ device_info[key] }}</span></div>
       {% endif %}{% endfor %}
     </div>
+  </div>
+  {% endif %}
+
+  {% if device_info.get("build_info") %}
+  {% set bi = device_info.build_info %}
+  <div class="section-title animate-in d2">Build Information (CI)</div>
+  <div class="device-grid animate-in d2" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
+    {% if bi.release %}
+    <div class="device-panel">
+      <h3>Release</h3>
+      {% for key, val in bi.release.items() %}
+      <div class="info-row"><span class="info-label">{{ key }}</span><span class="info-value">{{ val }}</span></div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if bi.platform %}
+    <div class="device-panel">
+      <h3>Platform</h3>
+      {% for key, val in bi.platform.items() %}
+      <div class="info-row"><span class="info-label">{{ key }}</span><span class="info-value">{{ val }}</span></div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if bi.firmware %}
+    <div class="device-panel">
+      <h3>Firmware (Expected)</h3>
+      {% for key, val in bi.firmware.items() %}
+      <div class="info-row"><span class="info-label">{{ key }}</span><span class="info-value">{{ val }}</span></div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% if bi.customer %}
+    <div class="device-panel">
+      <h3>Customer</h3>
+      {% for key, val in bi.customer.items() %}
+      <div class="info-row"><span class="info-label">{{ key }}</span><span class="info-value">{{ val }}</span></div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if device_info.get("build_validation") %}
+  {% set bv = device_info.build_validation %}
+  {% set bv_pass = bv|selectattr("match")|list|length %}
+  {% set bv_fail = bv|rejectattr("match")|list|length %}
+  <div class="section-title animate-in d2">Build Validation (Expected vs Actual)</div>
+  <div class="build-val animate-in d2">
+    <div class="crash-badge {{ 'crash-clean' if bv_fail == 0 else 'crash-found' }}" style="margin-bottom: 12px;">
+      {% if bv_fail == 0 %}
+        <span class="crash-icon">✓</span>
+        <span>All {{ bv|length }} properties match CI expected values</span>
+      {% else %}
+        <span class="crash-icon">✗</span>
+        <span>{{ bv_fail }} of {{ bv|length }} properties MISMATCH</span>
+      {% endif %}
+    </div>
+    <table class="build-val-table">
+      <tr><th>Property</th><th>Expected (CI)</th><th>Actual (Device)</th><th>Result</th></tr>
+      {% for v in bv %}
+      <tr class="{{ 'bv-mismatch' if not v.match else '' }}">
+        <td class="id-col">{{ v.property }}</td>
+        <td class="detail-value">{{ v.expected }}</td>
+        <td class="detail-value">{{ v.actual }}</td>
+        <td>
+          {% if v.match %}
+            <span class="status s-PASS">MATCH</span>
+          {% else %}
+            <span class="status s-FAIL">MISMATCH</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
   </div>
   {% endif %}
 

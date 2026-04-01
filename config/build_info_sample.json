@@ -1,0 +1,33 @@
+{
+  "release": {
+    "build_id": "REL_02.01.05.260226",
+    "version": "02.01.05.260226",
+    "type": "user",
+    "date": "2026-02-26",
+    "branch": "release/thorpe-a15"
+  },
+  "platform": {
+    "soc": "Lahaina (SM7325)",
+    "android_version": "15",
+    "security_patch_level": "2026-02-05",
+    "kernel_version": "5.4.233"
+  },
+  "firmware": {
+    "wwan": "SWIX12C_03.01.02.00",
+    "touch": "00_T7",
+    "keypad_mcu": "0.17"
+  },
+  "customer": {
+    "name": "Trimble",
+    "project": "T70 (Thorpe)",
+    "build_variant": "user"
+  },
+  "expected_props": {
+    "ro.build.display.id": "02.01.05.260226 release-keys",
+    "ro.build.version.release": "15",
+    "ro.build.version.security_patch": "2026-02-05",
+    "ro.product.model": "T70",
+    "ro.product.brand": "Trimble",
+    "ro.boot.hardware": "qcom"
+  }
+}
