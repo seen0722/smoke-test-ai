@@ -507,28 +507,11 @@
 
   {% if device_info.get("build_info") %}
   {% set bi = device_info.build_info %}
-  <div class="section-title animate-in d2">Build Information (CI)</div>
   <div class="device-grid animate-in d2" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
     {% if bi.release %}
     <div class="device-panel">
-      <h3>Release</h3>
+      <h3>Release (CI)</h3>
       {% for key, val in bi.release.items() %}
-      <div class="info-row"><span class="info-label">{{ key }}</span><span class="info-value">{{ val }}</span></div>
-      {% endfor %}
-    </div>
-    {% endif %}
-    {% if bi.platform %}
-    <div class="device-panel">
-      <h3>Platform</h3>
-      {% for key, val in bi.platform.items() %}
-      <div class="info-row"><span class="info-label">{{ key }}</span><span class="info-value">{{ val }}</span></div>
-      {% endfor %}
-    </div>
-    {% endif %}
-    {% if bi.firmware %}
-    <div class="device-panel">
-      <h3>Firmware (Expected)</h3>
-      {% for key, val in bi.firmware.items() %}
       <div class="info-row"><span class="info-label">{{ key }}</span><span class="info-value">{{ val }}</span></div>
       {% endfor %}
     </div>
