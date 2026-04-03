@@ -1155,14 +1155,15 @@ class TestChargingPlugin:
         return ChargingPlugin()
 
     def test_charging_detect_pass(self, charging_plugin):
-        """Full flow: discharge confirmed + charging recovered → PASS."""
+        """Full flow: discharge + recharge confirmed → PASS."""
         adb = MagicMock()
         usb_power = MagicMock()
         usb_power.power_off.return_value = True
         usb_power.power_on.return_value = True
         adb.shell.side_effect = [
-            MagicMock(stdout="  AC powered: false\n  USB powered: true\n  status: 2\n  Charge counter: 12820000\n"),
-            MagicMock(stdout="  AC powered: false\n  USB powered: true\n  status: 2\n  Charge counter: 12819000\n"),
+            MagicMock(stdout="  AC powered: false\n  USB powered: true\n  status: 2\n  Charge counter: 12820000\n"),  # initial
+            MagicMock(stdout="  AC powered: false\n  USB powered: true\n  status: 2\n  Charge counter: 12819000\n"),  # after power on
+            MagicMock(stdout="  AC powered: false\n  USB powered: true\n  status: 2\n  Charge counter: 12820000\n"),  # after settle (charging)
         ]
         adb.wait_for_device.return_value = True
         ctx = PluginContext(adb=adb, settings={}, device_capabilities={}, usb_power=usb_power)
@@ -1171,7 +1172,8 @@ class TestChargingPlugin:
         with patch("smoke_test_ai.plugins.charging.time.sleep"):
             result = charging_plugin.execute(tc, ctx)
         assert result.status == TestStatus.PASS
-        assert "discharge confirmed" in result.message
+        assert "discharge" in result.message
+        assert "recharge" in result.message
         usb_power.power_off.assert_called_once()
         usb_power.power_on.assert_called_once()
 
@@ -1193,6 +1195,26 @@ class TestChargingPlugin:
             result = charging_plugin.execute(tc, ctx)
         assert result.status == TestStatus.FAIL
         assert "No discharge" in result.message
+
+    def test_charging_detect_no_charge_inflow(self, charging_plugin):
+        """Discharge OK but charge not flowing back in → FAIL."""
+        adb = MagicMock()
+        usb_power = MagicMock()
+        usb_power.power_off.return_value = True
+        usb_power.power_on.return_value = True
+        adb.shell.side_effect = [
+            MagicMock(stdout="  AC powered: true\n  USB powered: false\n  status: 2\n  Charge counter: 12820000\n"),  # initial
+            MagicMock(stdout="  AC powered: true\n  USB powered: false\n  status: 2\n  Charge counter: 12819000\n"),  # discharged
+            MagicMock(stdout="  AC powered: true\n  USB powered: false\n  status: 2\n  Charge counter: 12819000\n"),  # not increasing
+        ]
+        adb.wait_for_device.return_value = True
+        ctx = PluginContext(adb=adb, settings={}, device_capabilities={}, usb_power=usb_power)
+        tc = {"id": "chg6", "name": "Charging", "type": "charging", "action": "detect",
+              "params": {"off_duration": 1, "settle_time": 0}}
+        with patch("smoke_test_ai.plugins.charging.time.sleep"):
+            result = charging_plugin.execute(tc, ctx)
+        assert result.status == TestStatus.FAIL
+        assert "No charge inflow" in result.message
 
     def test_charging_detect_no_usb_power(self, charging_plugin):
         """No usb_power controller -> SKIP."""
