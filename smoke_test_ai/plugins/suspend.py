@@ -235,6 +235,50 @@ class SuspendPlugin(TestPlugin):
         if cool_count == 0:
             errors.append("No cooling devices registered")
 
+        # 5. Sensor reactivity: stress CPU → verify temp increases
+        #    Pick a CPU zone that has a valid temp reading
+        cpu_zone = None
+        for name, temp in zones.items():
+            if name.startswith("cpu") and "usr" in name and min_temp < temp < max_temp:
+                cpu_zone = name
+                break
+
+        sensor_active = None
+        stress_duration = params.get("stress_duration", 120)
+        if cpu_zone:
+            cpu_before = zones[cpu_zone]
+            logger.info(f"  Sensor reactivity test: {cpu_zone} = {cpu_before/1000:.1f}°C")
+            logger.info(f"  Running CPU stress for {stress_duration}s (md5sum /dev/urandom x8 cores)...")
+            adb.shell(
+                f"for i in 1 2 3 4 5 6 7 8; do md5sum /dev/urandom & done; "
+                f"sleep {stress_duration}; kill $(jobs -p) 2>/dev/null",
+                timeout=stress_duration + 30,
+            )
+            # Re-read CPU temp
+            re_result = adb.shell(
+                f"cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | head -1; "
+                f"for tz in /sys/class/thermal/thermal_zone*/; do "
+                f"t=$(cat $tz/type 2>/dev/null); "
+                f"if [ \"$t\" = \"{cpu_zone}\" ]; then cat $tz/temp; fi; done"
+            )
+            re_out = re_result.stdout if hasattr(re_result, "stdout") else str(re_result)
+            # Get the last line (the specific zone temp)
+            re_lines = [l.strip() for l in re_out.splitlines() if l.strip()]
+            try:
+                cpu_after = int(re_lines[-1]) if re_lines else cpu_before
+            except ValueError:
+                cpu_after = cpu_before
+
+            delta = cpu_after - cpu_before
+            sensor_active = delta > 0
+            logger.info(f"  After stress: {cpu_zone} = {cpu_after/1000:.1f}°C "
+                        f"(delta={delta/1000:+.1f}°C) → "
+                        f"{'active ✓' if sensor_active else 'STALE ✗'}")
+
+            if not sensor_active:
+                errors.append(f"Sensor stale: {cpu_zone} did not change after CPU stress "
+                              f"({cpu_before/1000:.1f}°C → {cpu_after/1000:.1f}°C)")
+
         if errors:
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"Thermal check failed: {'; '.join(errors)}")
@@ -242,11 +286,12 @@ class SuspendPlugin(TestPlugin):
         key_temps = ", ".join(
             f"{kz}={zones[kz]/1000:.1f}°C" for kz in key_zones if kz in zones
         )
+        reactivity = f", sensor verified (CPU +{delta/1000:.1f}°C after stress)" if sensor_active else ""
         return TestResult(
             id=tid, name=tname, status=TestStatus.PASS,
             message=f"Thermal OK — {zone_count} zones, {cool_count} cooling devices, "
                     f"hottest: {hottest_name}={hottest_temp:.1f}°C. "
-                    f"Key: {key_temps}")
+                    f"Key: {key_temps}{reactivity}")
 
     def _wakelock_check(self, tc: dict, ctx: PluginContext) -> TestResult:
         """Check for abnormal wakelocks that would block suspend."""
