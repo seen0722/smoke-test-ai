@@ -89,6 +89,41 @@
       "expected": "0.17",
       "command": "cat /sys/devices/platform/soc/98c000.i2c/i2c-2/2-0012/fw",
       "mode": "exact"
+    },
+    {
+      "category": "Security",
+      "name": "Build Type",
+      "expected": "user",
+      "command": "getprop ro.build.type",
+      "mode": "exact"
+    },
+    {
+      "category": "Security",
+      "name": "Root (debuggable)",
+      "expected": "0",
+      "command": "getprop ro.debuggable",
+      "mode": "exact"
+    },
+    {
+      "category": "Security",
+      "name": "Root (secure)",
+      "expected": "1",
+      "command": "getprop ro.secure",
+      "mode": "exact"
+    },
+    {
+      "category": "Security",
+      "name": "Bootloader Lock",
+      "expected": "locked",
+      "command": "getprop ro.boot.vbmeta.device_state",
+      "mode": "exact"
+    },
+    {
+      "category": "Security",
+      "name": "Verified Boot",
+      "expected": "green",
+      "command": "getprop ro.boot.verifiedbootstate",
+      "mode": "exact"
     }
   ]
 }
