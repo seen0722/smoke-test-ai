@@ -13,6 +13,8 @@ class SuspendPlugin(TestPlugin):
         action = test_case.get("action", "")
         if action == "deep_sleep":
             return self._deep_sleep(test_case, context)
+        if action == "wakelock_check":
+            return self._wakelock_check(test_case, context)
         if action == "reboot":
             return self._reboot(test_case, context)
         return TestResult(
@@ -139,9 +141,12 @@ class SuspendPlugin(TestPlugin):
                               message=f"Screen did not wake after resume: {screen_out.strip()}")
 
         if not entered_deep_sleep:
+            # Diagnose: collect wakelock info to identify blockers
+            diag = self._diagnose_wakelocks(adb)
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"Deep sleep not entered during {suspend_duration}s suspend. "
-                                      f"Before: {initial_stats}, After: {final_stats}")
+                                      f"Before: {initial_stats}, After: {final_stats}\n"
+                                      f"--- Wakelock Diagnosis ---\n{diag}")
 
         return TestResult(
             id=tid, name=tname, status=TestStatus.PASS,
@@ -150,6 +155,144 @@ class SuspendPlugin(TestPlugin):
                     f"cxsd: {initial_stats['cxsd']}→{final_stats['cxsd']}, "
                     f"ddr: {initial_stats['ddr']}→{final_stats['ddr']})"
         )
+
+    def _wakelock_check(self, tc: dict, ctx: PluginContext) -> TestResult:
+        """Check for abnormal wakelocks that would block suspend."""
+        tid, tname = tc["id"], tc["name"]
+        params = tc.get("params", {})
+        max_partial = params.get("max_partial_wakelocks", 3)
+
+        adb = ctx.adb
+
+        # 1. Get Android framework wakelocks
+        framework_wl = self._get_framework_wakelocks(adb)
+        # 2. Get kernel wakeup sources with prevent_suspend_time > 0
+        kernel_blockers = self._get_kernel_wakeup_blockers(adb)
+
+        partial_count = len(framework_wl)
+        blocker_count = len(kernel_blockers)
+
+        logger.info(f"Framework partial wakelocks: {partial_count}")
+        for wl in framework_wl:
+            logger.info(f"  [{wl['type']}] {wl['tag']} (uid={wl['uid']})")
+        logger.info(f"Kernel wakeup blockers: {blocker_count}")
+        for kb in kernel_blockers[:5]:
+            logger.info(f"  {kb['name']}: active_count={kb['active_count']}, "
+                        f"total_time={kb['total_time']}ms")
+
+        if partial_count > max_partial:
+            wl_list = ", ".join(wl["tag"] for wl in framework_wl[:5])
+            return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                              message=f"Too many partial wakelocks: {partial_count} "
+                                      f"(max {max_partial}). Top: {wl_list}")
+
+        details = []
+        if framework_wl:
+            details.append(f"partial_wakelocks: {partial_count} "
+                          f"({', '.join(wl['tag'] for wl in framework_wl)})")
+        if kernel_blockers:
+            details.append(f"kernel_blockers: {blocker_count} "
+                          f"({', '.join(kb['name'] for kb in kernel_blockers[:3])})")
+
+        return TestResult(id=tid, name=tname, status=TestStatus.PASS,
+                          message=f"Wakelock check OK — "
+                                  f"{partial_count} partial wakelocks, "
+                                  f"{blocker_count} kernel blockers. "
+                                  + "; ".join(details) if details else "")
+
+    @staticmethod
+    def _get_framework_wakelocks(adb) -> list[dict]:
+        """Get active partial wakelocks from Android framework."""
+        result = adb.shell("dumpsys power | grep 'PARTIAL_WAKE_LOCK'")
+        stdout = result.stdout if hasattr(result, "stdout") else str(result)
+        wakelocks = []
+        for line in stdout.splitlines():
+            line = line.strip()
+            if not line or "PARTIAL_WAKE_LOCK" not in line:
+                continue
+            # Format: PARTIAL_WAKE_LOCK  'tag' ACQ=... (uid=... pid=...)
+            tag_m = re.search(r"'([^']+)'", line)
+            uid_m = re.search(r"uid=(\d+)", line)
+            wakelocks.append({
+                "type": "PARTIAL",
+                "tag": tag_m.group(1) if tag_m else line[:50],
+                "uid": uid_m.group(1) if uid_m else "?",
+                "raw": line,
+            })
+        return wakelocks
+
+    @staticmethod
+    def _get_kernel_wakeup_blockers(adb) -> list[dict]:
+        """Get kernel wakeup sources that actively prevent suspend."""
+        result = adb.shell("cat /d/wakeup_sources 2>/dev/null || "
+                          "cat /sys/kernel/debug/wakeup_sources 2>/dev/null")
+        stdout = result.stdout if hasattr(result, "stdout") else str(result)
+        blockers = []
+        for line in stdout.splitlines():
+            if line.startswith("name") or not line.strip():
+                continue
+            parts = line.split("\t")
+            if len(parts) < 9:
+                continue
+            name = parts[0].strip()
+            if not name:
+                continue
+            try:
+                active_count = int(parts[1].strip())
+                total_time = int(parts[6].strip())
+                prevent_time = int(parts[8].strip())
+            except (ValueError, IndexError):
+                continue
+            # Only include sources with significant activity
+            if active_count > 10 and total_time > 1000:
+                blockers.append({
+                    "name": name,
+                    "active_count": active_count,
+                    "total_time": total_time,
+                    "prevent_suspend_time": prevent_time,
+                })
+        # Sort by total_time descending
+        blockers.sort(key=lambda x: x["total_time"], reverse=True)
+        return blockers[:10]
+
+    @staticmethod
+    def _diagnose_wakelocks(adb) -> str:
+        """Collect wakelock diagnostics for deep sleep failure analysis."""
+        lines = []
+
+        # Framework wakelocks
+        result = adb.shell("dumpsys power | grep -E 'WAKE_LOCK|Suspend Blockers' -A5")
+        stdout = result.stdout if hasattr(result, "stdout") else str(result)
+        fw_locks = [l.strip() for l in stdout.splitlines() if l.strip()]
+        if fw_locks:
+            lines.append("Framework wakelocks:")
+            for l in fw_locks[:10]:
+                lines.append(f"  {l}")
+
+        # Kernel wakeup sources (top by total_time)
+        result = adb.shell("cat /d/wakeup_sources 2>/dev/null || "
+                          "cat /sys/kernel/debug/wakeup_sources 2>/dev/null")
+        stdout = result.stdout if hasattr(result, "stdout") else str(result)
+        sources = []
+        for line in stdout.splitlines():
+            if line.startswith("name") or not line.strip():
+                continue
+            parts = line.split("\t")
+            if len(parts) >= 7:
+                name = parts[0].strip()
+                try:
+                    total = int(parts[6].strip())
+                except (ValueError, IndexError):
+                    total = 0
+                if name and total > 1000:
+                    sources.append((name, total))
+        sources.sort(key=lambda x: x[1], reverse=True)
+        if sources:
+            lines.append("Top kernel wakeup sources (by total_time ms):")
+            for name, total in sources[:10]:
+                lines.append(f"  {name}: {total}ms")
+
+        return "\n".join(lines) if lines else "No wakelock data available"
 
     @staticmethod
     def _read_sleep_stats(adb) -> dict | None:

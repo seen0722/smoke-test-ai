@@ -549,6 +549,14 @@ test_suite:
       command: "ls /sys/class/thermal/thermal_zone*/type | wc -l"
       expected_pattern: "^[1-9][0-9]*$"
 
+    - id: "wakelock_check"
+      name: "Wakelock 異常檢查"
+      type: "suspend"
+      category: "Power"
+      action: "wakelock_check"
+      params:
+        max_partial_wakelocks: 3
+
     - id: "suspend_deep_sleep"
       name: "Suspend/Resume + Deep Sleep"
       type: "suspend"
@@ -557,7 +565,7 @@ test_suite:
       params:
         suspend_duration: 120
         adb_timeout: 60
-      depends_on: "charging_connected"
+      depends_on: "wakelock_check"
       requires:
         device_capability: "usb_power"
 

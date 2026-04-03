@@ -1330,12 +1330,15 @@ class TestSuspendPlugin:
             MagicMock(stdout="mScreenState=ON"),               # screen on
             MagicMock(stdout="aosd:3, cxsd:3, ddr:3"),        # same stats!
             MagicMock(stdout=""),                              # airplane off
+            MagicMock(stdout="PARTIAL_WAKE_LOCK 'bad_wl' (uid=1000)"),  # wakelock diag
+            MagicMock(stdout="name\tactive\nusb\t50\t50\t0\t0\t0\t5000\t100\t0\t0"),  # kernel sources
         ]
         ctx = PluginContext(adb=adb, settings={}, device_capabilities={}, usb_power=usb_power)
         with patch("smoke_test_ai.plugins.suspend.time.sleep"):
             result = suspend_plugin.execute(self._make_tc(), ctx)
         assert result.status == TestStatus.FAIL
         assert "Deep sleep not entered" in result.message
+        assert "Wakelock Diagnosis" in result.message
 
     def test_screen_not_wake(self, suspend_plugin):
         """Screen doesn't wake after resume → FAIL."""
