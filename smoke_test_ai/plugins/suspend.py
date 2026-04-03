@@ -270,11 +270,10 @@ class SuspendPlugin(TestPlugin):
             # Flash LED
             adb.shell("echo 200 > /sys/class/leds/led:torch_0/brightness 2>/dev/null; "
                        "echo 200 > /sys/class/leds/led:torch_1/brightness 2>/dev/null")
-            # CPU stress: 4 cores with pure calculation (no memory allocation)
-            # sha256sum reads 1 byte at a time from /dev/zero — minimal memory, max CPU
+            # CPU stress: 4 cores with pure busy loop (zero memory allocation)
             adb.shell("nohup sh -c '"
                        "for i in 1 2 3 4; do "
-                       "  while true; do echo x; done | sha256sum > /dev/null & "
+                       "  while true; do true; done & "
                        "done; wait' > /dev/null 2>&1 &")
             # GPU stress: screenrecord HW encoder
             adb.shell(f"nohup screenrecord --time-limit {dur} /dev/null > /dev/null 2>&1 &")
@@ -288,8 +287,8 @@ class SuspendPlugin(TestPlugin):
                 logger.warning("  ADB disconnected after stress, waiting for reconnect...")
                 adb.wait_for_device(timeout=120)
 
-            adb.shell("killall sha256sum screenrecord 2>/dev/null; "
-                       "pkill -f 'echo x' 2>/dev/null; "
+            adb.shell("killall screenrecord 2>/dev/null; "
+                       "pkill -f 'while true' 2>/dev/null; "
                        "echo 0 > /sys/class/leds/led:torch_0/brightness 2>/dev/null; "
                        "echo 0 > /sys/class/leds/led:torch_1/brightness 2>/dev/null; "
                        "echo 128 > /sys/class/backlight/panel0-backlight/brightness 2>/dev/null")

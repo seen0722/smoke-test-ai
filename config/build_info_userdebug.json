@@ -1,0 +1,129 @@
+{
+  "release": {
+    "build_id": "02.02.01.260319_dev",
+    "version": "02.02.01.260319_dev",
+    "type": "userdebug",
+    "date": "2026-03-19",
+    "branch": "release/thorpe-a15",
+    "manifest_snapshot": "https://gitlab.example.com/bsp/thorpe/manifests/-/blob/release/thorpe-a15/02.02.01.260319_dev.xml",
+    "gitlab_tag": "v02.02.01.260319_dev"
+  },
+  "customer": {
+    "name": "Trimble",
+    "project": "T70 (Thorpe)"
+  },
+  "validations": [
+    {
+      "category": "Platform",
+      "name": "Android Version",
+      "expected": "15",
+      "command": "getprop ro.build.version.release",
+      "mode": "exact"
+    },
+    {
+      "category": "Platform",
+      "name": "Security Patch",
+      "expected": "2026-04-01",
+      "command": "getprop ro.build.version.security_patch",
+      "mode": "exact"
+    },
+    {
+      "category": "Platform",
+      "name": "Kernel",
+      "expected": "5.4.295",
+      "command": "uname -r",
+      "mode": "contains"
+    },
+    {
+      "category": "Build",
+      "name": "Build ID",
+      "expected": "qssi-userdebug 15 AQ3A.250924.001 02.02.01.260319_dev release-keys",
+      "command": "getprop ro.build.display.id",
+      "mode": "exact"
+    },
+    {
+      "category": "Build",
+      "name": "Model",
+      "expected": "T70",
+      "command": "getprop ro.product.model",
+      "mode": "exact"
+    },
+    {
+      "category": "Build",
+      "name": "Brand",
+      "expected": "Trimble",
+      "command": "getprop ro.product.brand",
+      "mode": "exact"
+    },
+    {
+      "category": "Build",
+      "name": "Fingerprint",
+      "expected": "Trimble/T70/thorpe:15/AQ3A.250924.001/02.02.01.260319_dev:userdebug/release-keys",
+      "command": "getprop ro.build.fingerprint",
+      "mode": "exact"
+    },
+    {
+      "category": "Build",
+      "name": "GMS Version",
+      "expected": "15_202603",
+      "command": "getprop ro.com.google.gmsversion",
+      "mode": "exact"
+    },
+    {
+      "category": "Firmware",
+      "name": "WWAN Module",
+      "expected": "SWIX12C_03.01.02.00",
+      "command": "getprop gsm.version.baseband",
+      "mode": "contains"
+    },
+    {
+      "category": "Firmware",
+      "name": "Touch Controller",
+      "expected": "00_T7",
+      "command": "cat /sys/devices/platform/soc/a94000.i2c/i2c-5/5-002a/fw_version",
+      "mode": "exact"
+    },
+    {
+      "category": "Firmware",
+      "name": "Keypad MCU",
+      "expected": "0.17",
+      "command": "cat /sys/devices/platform/soc/98c000.i2c/i2c-2/2-0012/fw",
+      "mode": "exact"
+    },
+    {
+      "category": "Security",
+      "name": "Build Type",
+      "expected": "userdebug",
+      "command": "getprop ro.build.type",
+      "mode": "exact"
+    },
+    {
+      "category": "Security",
+      "name": "Root (debuggable)",
+      "expected": "1",
+      "command": "getprop ro.debuggable",
+      "mode": "exact"
+    },
+    {
+      "category": "Security",
+      "name": "Root (secure)",
+      "expected": "0",
+      "command": "getprop ro.secure",
+      "mode": "exact"
+    },
+    {
+      "category": "Security",
+      "name": "Bootloader Lock",
+      "expected": "unlocked",
+      "command": "getprop ro.boot.vbmeta.device_state",
+      "mode": "exact"
+    },
+    {
+      "category": "Security",
+      "name": "Verified Boot",
+      "expected": "orange",
+      "command": "getprop ro.boot.verifiedbootstate",
+      "mode": "exact"
+    }
+  ]
+}
