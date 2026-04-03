@@ -235,49 +235,99 @@ class SuspendPlugin(TestPlugin):
         if cool_count == 0:
             errors.append("No cooling devices registered")
 
-        # 5. Sensor reactivity: stress CPU → verify temp increases
-        #    Pick a CPU zone that has a valid temp reading
+        # 5. Sensor reactivity: stress CPU → verify all key zones + CPU zone respond
+        #    Pick a CPU zone for primary check
         cpu_zone = None
         for name, temp in zones.items():
             if name.startswith("cpu") and "usr" in name and min_temp < temp < max_temp:
                 cpu_zone = name
                 break
 
-        sensor_active = None
+        # Zones to verify reactivity: key_zones + CPU zone
+        verify_zones = list(key_zones)
+        if cpu_zone and cpu_zone not in verify_zones:
+            verify_zones.insert(0, cpu_zone)
+
+        # Record before temps
+        before_temps = {z: zones[z] for z in verify_zones if z in zones}
+
         stress_duration = params.get("stress_duration", 120)
-        if cpu_zone:
-            cpu_before = zones[cpu_zone]
-            logger.info(f"  Sensor reactivity test: {cpu_zone} = {cpu_before/1000:.1f}°C")
-            logger.info(f"  Running CPU stress for {stress_duration}s (md5sum /dev/urandom x8 cores)...")
-            adb.shell(
-                f"for i in 1 2 3 4 5 6 7 8; do md5sum /dev/urandom & done; "
-                f"sleep {stress_duration}; kill $(jobs -p) 2>/dev/null",
-                timeout=stress_duration + 30,
-            )
-            # Re-read CPU temp
+        stale_zones = []
+        active_zones = []
+
+        if before_temps:
+            logger.info(f"  Before stress: {', '.join(f'{z}={t/1000:.1f}°C' for z, t in before_temps.items())}")
+            logger.info(f"  Running max system stress for {stress_duration}s "
+                        f"(CPU+GPU+Display+WiFi+Camera+Flash+Audio)...")
+            dur = stress_duration
+            # Each component launched as independent nohup process
+            # to prevent adb shell exit from killing background jobs
+            adb.shell("input keyevent KEYCODE_WAKEUP")
+            adb.shell("echo 255 > /sys/class/backlight/panel0-backlight/brightness 2>/dev/null")
+            adb.shell("echo 200 > /sys/class/leds/led:torch_0/brightness 2>/dev/null; "
+                       "echo 200 > /sys/class/leds/led:torch_1/brightness 2>/dev/null")
+            adb.shell("nohup sh -c 'for i in 1 2 3 4 5 6 7 8; do md5sum /dev/urandom & done; wait' "
+                       "> /dev/null 2>&1 &")
+            adb.shell(f"nohup screenrecord --time-limit {dur} /dev/null > /dev/null 2>&1 &")
+            adb.shell("am start -n org.codeaurora.snapcam/com.android.camera.CameraLauncher 2>/dev/null")
+            adb.shell("nohup iperf3 -s -p 5201 > /dev/null 2>&1 &")
+            adb.shell(f"nohup iperf3 -c 127.0.0.1 -u -b 100M -t {dur} -p 5201 > /dev/null 2>&1 &")
+            adb.shell("am start -a android.intent.action.VIEW "
+                       "-d file:///product/media/audio/ringtones/Aquila.ogg "
+                       "-t audio/ogg 2>/dev/null")
+            logger.info("  All stress components started")
+
+            # Wait for stress duration
+            time.sleep(dur)
+
+            # Cleanup
+            adb.shell("killall md5sum iperf3 screenrecord 2>/dev/null; "
+                       "am force-stop org.codeaurora.snapcam 2>/dev/null; "
+                       "echo 0 > /sys/class/leds/led:torch_0/brightness 2>/dev/null; "
+                       "echo 0 > /sys/class/leds/led:torch_1/brightness 2>/dev/null; "
+                       "echo 128 > /sys/class/backlight/panel0-backlight/brightness 2>/dev/null")
+            logger.info("  Stress cleanup done")
+
+            # Re-read all thermal zones after stress
             re_result = adb.shell(
-                f"cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | head -1; "
-                f"for tz in /sys/class/thermal/thermal_zone*/; do "
-                f"t=$(cat $tz/type 2>/dev/null); "
-                f"if [ \"$t\" = \"{cpu_zone}\" ]; then cat $tz/temp; fi; done"
+                "for tz in /sys/class/thermal/thermal_zone*/; do "
+                "echo \"$(cat $tz/type 2>/dev/null)|$(cat $tz/temp 2>/dev/null)\"; done"
             )
             re_out = re_result.stdout if hasattr(re_result, "stdout") else str(re_result)
-            # Get the last line (the specific zone temp)
-            re_lines = [l.strip() for l in re_out.splitlines() if l.strip()]
-            try:
-                cpu_after = int(re_lines[-1]) if re_lines else cpu_before
-            except ValueError:
-                cpu_after = cpu_before
+            after_zones = {}
+            for line in re_out.splitlines():
+                if "|" not in line:
+                    continue
+                parts = line.split("|", 1)
+                name = parts[0].strip()
+                try:
+                    after_zones[name] = int(parts[1].strip())
+                except (ValueError, IndexError):
+                    pass
 
-            delta = cpu_after - cpu_before
-            sensor_active = delta > 0
-            logger.info(f"  After stress: {cpu_zone} = {cpu_after/1000:.1f}°C "
-                        f"(delta={delta/1000:+.1f}°C) → "
-                        f"{'active ✓' if sensor_active else 'STALE ✗'}")
+            # Compare before/after for each verify zone
+            for z in verify_zones:
+                if z not in before_temps or z not in after_zones:
+                    continue
+                before = before_temps[z]
+                after = after_zones[z]
+                delta = after - before
+                if delta > 0:
+                    active_zones.append({"name": z, "before": before, "after": after, "delta": delta})
+                    logger.info(f"  {z}: {before/1000:.1f}→{after/1000:.1f}°C "
+                                f"(+{delta/1000:.1f}°C) ✓")
+                else:
+                    stale_zones.append(z)
+                    logger.warning(f"  {z}: {before/1000:.1f}→{after/1000:.1f}°C "
+                                   f"({delta/1000:+.1f}°C) ✗ STALE")
 
-            if not sensor_active:
-                errors.append(f"Sensor stale: {cpu_zone} did not change after CPU stress "
-                              f"({cpu_before/1000:.1f}°C → {cpu_after/1000:.1f}°C)")
+        # CPU zone must respond (mandatory)
+        if cpu_zone and cpu_zone in [s for s in stale_zones]:
+            errors.append(f"CPU sensor stale: {cpu_zone} did not change after {stress_duration}s stress")
+
+        # Warn if key zones are stale (non-CPU zones may not always change)
+        if stale_zones:
+            logger.warning(f"  Stale zones: {', '.join(stale_zones)}")
 
         if errors:
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
@@ -286,12 +336,14 @@ class SuspendPlugin(TestPlugin):
         key_temps = ", ".join(
             f"{kz}={zones[kz]/1000:.1f}°C" for kz in key_zones if kz in zones
         )
-        reactivity = f", sensor verified (CPU +{delta/1000:.1f}°C after stress)" if sensor_active else ""
+        reactivity_parts = [f"{a['name']}+{a['delta']/1000:.1f}°C" for a in active_zones]
+        reactivity = f", verified: {', '.join(reactivity_parts)}" if reactivity_parts else ""
+        stale_note = f", stale: {', '.join(stale_zones)}" if stale_zones else ""
         return TestResult(
             id=tid, name=tname, status=TestStatus.PASS,
             message=f"Thermal OK — {zone_count} zones, {cool_count} cooling devices, "
                     f"hottest: {hottest_name}={hottest_temp:.1f}°C. "
-                    f"Key: {key_temps}{reactivity}")
+                    f"Key: {key_temps}{reactivity}{stale_note}")
 
     def _wakelock_check(self, tc: dict, ctx: PluginContext) -> TestResult:
         """Check for abnormal wakelocks that would block suspend."""
