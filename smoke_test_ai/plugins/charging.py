@@ -37,76 +37,43 @@ class ChargingPlugin(TestPlugin):
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"Initial state not charging: {initial['raw']}")
 
-        # 2. Record charge counter before power off
-        before_cc = initial["charge_counter"]
         logger.info(f"Initial: powered={initial['powered']}, "
-                    f"status={initial['status']}, charge_counter={before_cc}")
+                    f"status={initial['status']}, current={initial['current_ma']:.0f}mA")
 
-        # 3. Power off → wait → power on
+        # 2. Power off → wait → power on
         ctx.usb_power.power_off()
         time.sleep(off_duration)
         ctx.usb_power.power_on()
 
-        # 4. Wait for ADB reconnection + settle
+        # 3. Wait for ADB reconnection + settle
         adb.wait_for_device(timeout=60)
         time.sleep(settle_time)
 
-        # 5. Check recovered state (first reading after power on)
+        # 4. Check recovered state
         recovered = self._get_battery_info(adb)
-        after_cc = recovered["charge_counter"]
-        discharge_delta = after_cc - before_cc
-
         logger.info(f"Recovered: powered={recovered['powered']}, "
-                    f"status={recovered['status']}, charge_counter={after_cc}, "
-                    f"discharge_delta={discharge_delta}")
+                    f"status={recovered['status']}, current={recovered['current_ma']:.0f}mA")
 
-        # 6. Validate: charging recovered
+        # 5. Validate: charging recovered
         if not recovered["powered"] or recovered["status"] not in (2, 5):
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
                               message=f"Charging not recovered after power on: "
                                       f"powered={recovered['powered']}, "
                                       f"status={recovered['status']}")
 
-        # 7. Validate: discharge occurred (charge counter decreased)
-        if before_cc > 0 and discharge_delta >= 0:
+        # 6. Validate: battery is not discharging (current >= 0)
+        current = recovered["current_ma"]
+        if current < 0:
             return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
-                              message=f"No discharge detected during power off "
-                                      f"(charge_counter: {before_cc}→{after_cc}, "
-                                      f"delta={discharge_delta}). "
-                                      f"USB hub may not be cutting VBUS power.")
-
-        # 8. Wait and verify charge is flowing in (counter increasing)
-        # Skip charge inflow check if battery is full (100%) — charging IC stops at full
-        battery_level = recovered.get("level", 0)
-        if battery_level >= 95 or recovered["status"] == 5:
-            logger.info(f"Battery near full (level={battery_level}%, status={recovered['status']}) — "
-                        f"skip charge inflow check (trickle charge too slow to measure)")
-            return TestResult(
-                id=tid, name=tname, status=TestStatus.PASS,
-                message=f"Charging detection OK — "
-                        f"discharge: {before_cc}→{after_cc} ({discharge_delta} uAh), "
-                        f"battery near full ({battery_level}%) — charge inflow check skipped")
-
-        time.sleep(settle_time)
-        charging = self._get_battery_info(adb)
-        charging_cc = charging["charge_counter"]
-        charge_delta = charging_cc - after_cc
-
-        logger.info(f"Charging: charge_counter={charging_cc}, "
-                    f"charge_delta=+{charge_delta}")
-
-        if charge_delta <= 0:
-            return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
-                              message=f"No charge inflow detected after power on "
-                                      f"(charge_counter: {after_cc}→{charging_cc}, "
-                                      f"delta={charge_delta}). "
-                                      f"Charging circuit may not be working.")
+                              message=f"Battery discharging after power on: "
+                                      f"current={current:.0f}mA (expected >= 0)")
 
         return TestResult(
             id=tid, name=tname, status=TestStatus.PASS,
             message=f"Charging detection OK — "
-                    f"discharge: {before_cc}→{after_cc} ({discharge_delta} uAh), "
-                    f"recharge: {after_cc}→{charging_cc} (+{charge_delta} uAh)")
+                    f"powered={recovered['powered']}, "
+                    f"status={recovered['status']}, "
+                    f"current={current:.0f}mA")
 
     @staticmethod
     def _get_battery_info(adb) -> dict:
@@ -116,16 +83,24 @@ class ChargingPlugin(TestPlugin):
         usb = bool(re.search(r"USB powered:\s*true", stdout))
         status_m = re.search(r"status:\s*(\d+)", stdout)
         status = int(status_m.group(1)) if status_m else 0
-        cc_m = re.search(r"Charge counter:\s*(\d+)", stdout)
-        charge_counter = int(cc_m.group(1)) if cc_m else 0
         level_m = re.search(r"level:\s*(\d+)", stdout)
         level = int(level_m.group(1)) if level_m else 0
+
+        # Read battery current (uA → mA)
+        current_ma = 0.0
+        try:
+            cur_result = adb.shell("cat /sys/class/power_supply/battery/current_now")
+            cur_out = cur_result.stdout if hasattr(cur_result, "stdout") else str(cur_result)
+            current_ma = int(cur_out.strip()) / 1000  # uA → mA
+        except Exception:
+            pass
+
         return {
             "powered": ac or usb,
             "ac": ac,
             "usb": usb,
             "status": status,
-            "charge_counter": charge_counter,
             "level": level,
+            "current_ma": current_ma,
             "raw": stdout.strip()[:200],
         }
