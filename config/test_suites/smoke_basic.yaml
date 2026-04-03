@@ -542,12 +542,18 @@ test_suite:
       requires:
         device_capability: "usb_power"
 
-    - id: "thermal_zone"
-      name: "Thermal Driver"
-      type: "adb_shell"
+    - id: "thermal_check"
+      name: "Thermal 溫度檢查"
+      type: "suspend"
       category: "Power"
-      command: "ls /sys/class/thermal/thermal_zone*/type | wc -l"
-      expected_pattern: "^[1-9][0-9]*$"
+      action: "thermal_check"
+      params:
+        min_temp: 5000
+        max_temp: 65000
+        key_zones:
+          - "battery"
+          - "xo-therm-usr"
+          - "quiet-therm-usr"
 
     - id: "wakelock_check"
       name: "Wakelock 異常檢查"

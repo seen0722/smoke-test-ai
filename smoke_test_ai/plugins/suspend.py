@@ -15,6 +15,8 @@ class SuspendPlugin(TestPlugin):
             return self._deep_sleep(test_case, context)
         if action == "wakelock_check":
             return self._wakelock_check(test_case, context)
+        if action == "thermal_check":
+            return self._thermal_check(test_case, context)
         if action == "reboot":
             return self._reboot(test_case, context)
         return TestResult(
@@ -155,6 +157,96 @@ class SuspendPlugin(TestPlugin):
                     f"cxsd: {initial_stats['cxsd']}→{final_stats['cxsd']}, "
                     f"ddr: {initial_stats['ddr']}→{final_stats['ddr']})"
         )
+
+    def _thermal_check(self, tc: dict, ctx: PluginContext) -> TestResult:
+        """Check thermal subsystem: zone temps in range + cooling devices exist."""
+        tid, tname = tc["id"], tc["name"]
+        params = tc.get("params", {})
+        min_temp = params.get("min_temp", 5000)     # 5°C in millidegrees
+        max_temp = params.get("max_temp", 65000)    # 65°C
+        # Key zones to check (common across Qualcomm platforms)
+        key_zones = params.get("key_zones", [
+            "battery", "xo-therm-usr", "quiet-therm-usr",
+        ])
+
+        adb = ctx.adb
+
+        # 1. Read all thermal zones
+        result = adb.shell(
+            "for tz in /sys/class/thermal/thermal_zone*/; do "
+            "echo \"$(cat $tz/type 2>/dev/null)|$(cat $tz/temp 2>/dev/null)\"; done"
+        )
+        stdout = result.stdout if hasattr(result, "stdout") else str(result)
+
+        zones = {}
+        errors = []
+        for line in stdout.splitlines():
+            line = line.strip()
+            if "|" not in line:
+                continue
+            parts = line.split("|", 1)
+            name = parts[0].strip()
+            temp_str = parts[1].strip()
+            if not name or not temp_str:
+                continue
+            try:
+                temp = int(temp_str)
+            except ValueError:
+                continue
+            # Skip BCL zones (negative/special values) and step zones with 0
+            if temp < -100000 or name.endswith("-bcl-lvl0") or name.endswith("-bcl-lvl1") or name.endswith("-bcl-lvl2"):
+                continue
+            zones[name] = temp
+
+        zone_count = len(zones)
+        logger.info(f"Thermal zones with valid temp: {zone_count}")
+
+        # 2. Check key zones exist and have reasonable temps
+        for kz in key_zones:
+            if kz in zones:
+                temp = zones[kz]
+                temp_c = temp / 1000
+                if temp < min_temp or temp > max_temp:
+                    errors.append(f"{kz}: {temp_c:.1f}°C (out of range "
+                                  f"{min_temp/1000:.0f}-{max_temp/1000:.0f}°C)")
+                else:
+                    logger.info(f"  {kz}: {temp_c:.1f}°C ✓")
+            else:
+                errors.append(f"{kz}: zone not found")
+
+        # 3. Find hottest zone
+        if zones:
+            hottest_name = max(zones, key=zones.get)
+            hottest_temp = zones[hottest_name] / 1000
+            logger.info(f"  Hottest: {hottest_name} = {hottest_temp:.1f}°C")
+
+            if zones[hottest_name] > max_temp:
+                errors.append(f"Overheating: {hottest_name} = {hottest_temp:.1f}°C")
+
+        # 4. Check cooling devices exist
+        cool_result = adb.shell("ls /sys/class/thermal/cooling_device*/type 2>/dev/null | wc -l")
+        cool_out = cool_result.stdout if hasattr(cool_result, "stdout") else str(cool_result)
+        try:
+            cool_count = int(cool_out.strip())
+        except ValueError:
+            cool_count = 0
+        logger.info(f"  Cooling devices: {cool_count}")
+
+        if cool_count == 0:
+            errors.append("No cooling devices registered")
+
+        if errors:
+            return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                              message=f"Thermal check failed: {'; '.join(errors)}")
+
+        key_temps = ", ".join(
+            f"{kz}={zones[kz]/1000:.1f}°C" for kz in key_zones if kz in zones
+        )
+        return TestResult(
+            id=tid, name=tname, status=TestStatus.PASS,
+            message=f"Thermal OK — {zone_count} zones, {cool_count} cooling devices, "
+                    f"hottest: {hottest_name}={hottest_temp:.1f}°C. "
+                    f"Key: {key_temps}")
 
     def _wakelock_check(self, tc: dict, ctx: PluginContext) -> TestResult:
         """Check for abnormal wakelocks that would block suspend."""
