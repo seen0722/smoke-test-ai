@@ -1,5 +1,6 @@
 import re
 import time
+from pathlib import Path
 
 from smoke_test_ai.core.test_runner import TestResult, TestStatus
 from smoke_test_ai.plugins.base import TestPlugin, PluginContext
@@ -258,40 +259,79 @@ class SuspendPlugin(TestPlugin):
                                    else str(uptime_result)).strip() or "0")
             logger.info(f"  system_server PID={ss_pid_before}, uptime={uptime_before:.0f}s")
 
-            logger.info(f"  Running thermal stress for {stress_duration}s "
-                        f"(CPU x4 + GPU + Display + Flash)...")
             dur = stress_duration
+            stress_mem = params.get("stress_memory_mb", 64)
+            stress_threads = params.get("stress_threads", 4)
+
+            # Check if stressapptest is available, push if not
+            sat_check = adb.shell("ls /data/local/tmp/stressapptest 2>/dev/null")
+            sat_out = (sat_check.stdout if hasattr(sat_check, "stdout") else str(sat_check)).strip()
+            if not sat_out:
+                # Try to push from project tools/ directory
+                sat_local = Path(__file__).parent.parent.parent / "tools" / "stressapptest-arm64"
+                if sat_local.exists():
+                    try:
+                        import subprocess
+                        subprocess.run(
+                            ["adb", "-s", adb.serial, "push", str(sat_local), "/data/local/tmp/stressapptest"],
+                            capture_output=True, timeout=10)
+                        adb.shell("chmod +x /data/local/tmp/stressapptest")
+                        logger.info("  stressapptest pushed to device")
+                        sat_out = "/data/local/tmp/stressapptest"
+                    except Exception as e:
+                        logger.warning(f"  Failed to push stressapptest: {e}")
+            has_sat = bool(sat_out)
+
             # Keep screen alive during stress
             adb.shell("input keyevent KEYCODE_WAKEUP")
             adb.shell("wm dismiss-keyguard")
             adb.shell("settings put system screen_off_timeout 2147483647")
-            # Display: max brightness
+            # Display: max brightness + Flash LED
             adb.shell("echo 255 > /sys/class/backlight/panel0-backlight/brightness 2>/dev/null")
-            # Flash LED
             adb.shell("echo 200 > /sys/class/leds/led:torch_0/brightness 2>/dev/null; "
                        "echo 200 > /sys/class/leds/led:torch_1/brightness 2>/dev/null")
-            # CPU stress: 4 cores with pure busy loop (zero memory allocation)
-            adb.shell("nohup sh -c '"
-                       "for i in 1 2 3 4; do "
-                       "  while true; do true; done & "
-                       "done; wait' > /dev/null 2>&1 &")
+
+            if has_sat:
+                logger.info(f"  Running stressapptest for {dur}s "
+                            f"({stress_threads} threads, {stress_mem}MB RAM + Display + Flash)...")
+                adb.shell(
+                    f"nohup /data/local/tmp/stressapptest "
+                    f"-s {dur} -C {stress_threads} -M {stress_mem} -W "
+                    f"> /data/local/tmp/stressapptest.log 2>&1 &")
+            else:
+                logger.info(f"  stressapptest not found, using busy loop for {dur}s "
+                            f"(CPU x4 + Display + Flash)...")
+                adb.shell("nohup sh -c '"
+                           "for i in 1 2 3 4; do "
+                           "  while true; do true; done & "
+                           "done; wait' > /dev/null 2>&1 &")
+
             # GPU stress: screenrecord HW encoder
             adb.shell(f"nohup screenrecord --time-limit {dur} /dev/null > /dev/null 2>&1 &")
-            logger.info("  Stress components started (CPU x4 + GPU + Display + Flash)")
+            logger.info("  Stress components started")
 
             # Wait for stress duration
             time.sleep(dur)
 
-            # Cleanup — device may have rebooted, try reconnect first
+            # Cleanup
             if not adb.is_connected():
                 logger.warning("  ADB disconnected after stress, waiting for reconnect...")
                 adb.wait_for_device(timeout=120)
 
-            adb.shell("killall screenrecord 2>/dev/null; "
+            adb.shell("killall stressapptest screenrecord 2>/dev/null; "
                        "pkill -f 'while true' 2>/dev/null; "
                        "echo 0 > /sys/class/leds/led:torch_0/brightness 2>/dev/null; "
                        "echo 0 > /sys/class/leds/led:torch_1/brightness 2>/dev/null; "
                        "echo 128 > /sys/class/backlight/panel0-backlight/brightness 2>/dev/null")
+
+            # Check stressapptest result
+            if has_sat:
+                sat_log = adb.shell("tail -3 /data/local/tmp/stressapptest.log 2>/dev/null")
+                sat_result = (sat_log.stdout if hasattr(sat_log, "stdout") else str(sat_log)).strip()
+                if "FAIL" in sat_result:
+                    errors.append(f"stressapptest FAIL: {sat_result}")
+                logger.info(f"  stressapptest result: {sat_result}")
+
             logger.info("  Stress cleanup done")
 
             # Check stability: kernel reboot + system_server crash
