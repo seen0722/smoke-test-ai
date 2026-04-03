@@ -31,7 +31,7 @@ pdf = [
     "weasyprint>=60.0",
 ]
 serial-hub = [
-    "usb-port-controller",
+    "usb-port-controller @ git+https://github.com/seen0722/usb-port-controller.git",
 ]
 
 [project.scripts]
