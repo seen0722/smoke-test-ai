@@ -492,17 +492,19 @@ test_suite:
       requires:
         device_capability: "usb_power"
 
-    - id: "thermal_check"
-      name: "Thermal 驗證"
-      type: "suspend"
-      category: "Power"
-      action: "thermal_check"
-      params:
-        stress_duration: 120
-        key_zones:
-          - "battery"
-          - "xo-therm-usr"
-          - "quiet-therm-usr"
+    # thermal_check 暫時停用 — stress test 會導致 system_server crash
+    # 待 stressapptest 穩定性確認後再啟用
+    # - id: "thermal_check"
+    #   name: "Thermal 驗證"
+    #   type: "suspend"
+    #   category: "Power"
+    #   action: "thermal_check"
+    #   params:
+    #     stress_duration: 30
+    #     key_zones:
+    #       - "battery"
+    #       - "xo-therm-usr"
+    #       - "quiet-therm-usr"
 
     - id: "wakelock_check"
       name: "Wakelock 異常檢查"
