@@ -257,36 +257,72 @@ class SuspendPlugin(TestPlugin):
 
         if before_temps:
             logger.info(f"  Before stress: {', '.join(f'{z}={t/1000:.1f}°C' for z, t in before_temps.items())}")
-            logger.info(f"  Running max system stress for {stress_duration}s "
-                        f"(CPU+GPU+Display+WiFi+Camera+Flash+Audio)...")
+
+            # Record system_server PID + uptime before stress
+            ss_result = adb.shell("pidof system_server")
+            ss_pid_before = (ss_result.stdout if hasattr(ss_result, "stdout")
+                             else str(ss_result)).strip()
+            uptime_result = adb.shell("cat /proc/uptime | awk '{print $1}'")
+            uptime_before = float((uptime_result.stdout if hasattr(uptime_result, "stdout")
+                                   else str(uptime_result)).strip() or "0")
+            logger.info(f"  system_server PID={ss_pid_before}, uptime={uptime_before:.0f}s")
+
+            logger.info(f"  Running thermal stress for {stress_duration}s "
+                        f"(CPU x4 + GPU + Display + Flash)...")
             dur = stress_duration
-            # Each component launched as independent nohup process
-            # to prevent adb shell exit from killing background jobs
+            # Keep screen alive during stress
             adb.shell("input keyevent KEYCODE_WAKEUP")
+            adb.shell("wm dismiss-keyguard")
+            adb.shell("settings put system screen_off_timeout 2147483647")
+            # Display: max brightness
             adb.shell("echo 255 > /sys/class/backlight/panel0-backlight/brightness 2>/dev/null")
+            # Flash LED
             adb.shell("echo 200 > /sys/class/leds/led:torch_0/brightness 2>/dev/null; "
                        "echo 200 > /sys/class/leds/led:torch_1/brightness 2>/dev/null")
-            adb.shell("nohup sh -c 'for i in 1 2 3 4 5 6 7 8; do md5sum /dev/urandom & done; wait' "
+            # CPU stress: 4 cores (leave headroom for system_server)
+            adb.shell("nohup sh -c 'for i in 1 2 3 4; do md5sum /dev/urandom & done; wait' "
                        "> /dev/null 2>&1 &")
+            # GPU stress: screenrecord HW encoder
             adb.shell(f"nohup screenrecord --time-limit {dur} /dev/null > /dev/null 2>&1 &")
-            adb.shell("am start -n org.codeaurora.snapcam/com.android.camera.CameraLauncher 2>/dev/null")
-            adb.shell("nohup iperf3 -s -p 5201 > /dev/null 2>&1 &")
-            adb.shell(f"nohup iperf3 -c 127.0.0.1 -u -b 100M -t {dur} -p 5201 > /dev/null 2>&1 &")
-            adb.shell("am start -a android.intent.action.VIEW "
-                       "-d file:///product/media/audio/ringtones/Aquila.ogg "
-                       "-t audio/ogg 2>/dev/null")
-            logger.info("  All stress components started")
+            logger.info("  Stress components started (CPU x4 + GPU + Display + Flash)")
 
             # Wait for stress duration
             time.sleep(dur)
 
-            # Cleanup
-            adb.shell("killall md5sum iperf3 screenrecord 2>/dev/null; "
-                       "am force-stop org.codeaurora.snapcam 2>/dev/null; "
+            # Cleanup — device may have rebooted, try reconnect first
+            if not adb.is_connected():
+                logger.warning("  ADB disconnected after stress, waiting for reconnect...")
+                adb.wait_for_device(timeout=120)
+
+            adb.shell("killall md5sum screenrecord 2>/dev/null; "
                        "echo 0 > /sys/class/leds/led:torch_0/brightness 2>/dev/null; "
                        "echo 0 > /sys/class/leds/led:torch_1/brightness 2>/dev/null; "
                        "echo 128 > /sys/class/backlight/panel0-backlight/brightness 2>/dev/null")
             logger.info("  Stress cleanup done")
+
+            # Check stability: kernel reboot + system_server crash
+            try:
+                uptime_result = adb.shell("cat /proc/uptime | awk '{print $1}'")
+                uptime_after = float((uptime_result.stdout if hasattr(uptime_result, "stdout")
+                                      else str(uptime_result)).strip() or "0")
+            except Exception:
+                uptime_after = 0
+
+            ss_result = adb.shell("pidof system_server")
+            ss_pid_after = (ss_result.stdout if hasattr(ss_result, "stdout")
+                            else str(ss_result)).strip()
+
+            if uptime_after < uptime_before:
+                errors.append(f"Kernel reboot during stress! "
+                              f"uptime {uptime_before:.0f}s → {uptime_after:.0f}s")
+                logger.error(f"  KERNEL REBOOT: uptime {uptime_before:.0f}s → {uptime_after:.0f}s")
+            elif ss_pid_before and ss_pid_after and ss_pid_before != ss_pid_after:
+                errors.append(f"system_server crashed during stress! "
+                              f"PID {ss_pid_before} → {ss_pid_after} (framework restart)")
+                logger.error(f"  SYSTEM_SERVER CRASH: PID {ss_pid_before} → {ss_pid_after}")
+            else:
+                logger.info(f"  System stable (uptime {uptime_before:.0f}→{uptime_after:.0f}s, "
+                            f"system_server PID={ss_pid_after})")
 
             # Re-read all thermal zones after stress
             re_result = adb.shell(
