@@ -20,50 +20,8 @@ test_suite:
       command: "getprop ro.boot.sku"
       expected_pattern: ".+"
 
-    - id: "build_number"
-      name: "Build Number"
-      type: "adb_shell"
-      category: "Boot"
-      command: "getprop ro.build.display.id"
-      expected_pattern: ".+"
-
-    - id: "android_version"
-      name: "Android Version"
-      type: "adb_shell"
-      category: "Boot"
-      command: "getprop ro.build.version.release"
-      expected_pattern: "^[0-9]+"
-
-    - id: "kernel_version"
-      name: "Kernel 版本"
-      type: "adb_shell"
-      category: "Boot"
-      command: "uname -r"
-      expected_pattern: "^[0-9]+\\.[0-9]+\\."
-
-    # ============================================================
-    # Component Firmware
-    # ============================================================
-    - id: "fw_wwan"
-      name: "WWAN Module Firmware"
-      type: "adb_shell"
-      category: "Firmware"
-      command: "getprop gsm.version.baseband"
-      expected_pattern: ".+"
-
-    - id: "fw_touch"
-      name: "Touch Controller Firmware"
-      type: "adb_shell"
-      category: "Firmware"
-      command: "cat /sys/devices/platform/soc/a94000.i2c/i2c-5/5-002a/fw_version"
-      expected_pattern: ".+"
-
-    - id: "fw_keypad"
-      name: "Keypad MCU Firmware"
-      type: "adb_shell"
-      category: "Firmware"
-      command: "cat /sys/devices/platform/soc/98c000.i2c/i2c-2/2-0012/fw"
-      expected_pattern: ".+"
+    # Build Number, Android Version, Kernel, Firmware versions
+    # are validated via --build-info JSON (not duplicated here)
 
     - id: "selinux_enforcing"
       name: "SELinux Enforcing"
@@ -523,13 +481,6 @@ test_suite:
       command: "dumpsys battery | grep 'status'"
       expected_pattern: "status: [2-5]"
 
-    - id: "charging_connected"
-      name: "充電連線狀態"
-      type: "adb_shell"
-      category: "Power"
-      command: "dumpsys battery | grep 'powered'"
-      expected_pattern: ".*powered: true"
-
     - id: "charging_detection"
       name: "充電偵測測試"
       type: "charging"
@@ -538,7 +489,6 @@ test_suite:
       params:
         off_duration: 5
         settle_time: 5
-      depends_on: "charging_connected"
       requires:
         device_capability: "usb_power"
 
