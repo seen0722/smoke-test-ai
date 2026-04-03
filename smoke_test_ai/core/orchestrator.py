@@ -367,11 +367,23 @@ class Orchestrator:
 
         # Initialize USB power controller if configured
         usb_power_cfg = self.device_config.get("usb_power")
-        usb_power = UsbPowerController(
-            hub_location=usb_power_cfg["hub_location"],
-            port=usb_power_cfg["port"],
-            off_duration=usb_power_cfg.get("off_duration", 3.0),
-        ) if usb_power_cfg else None
+        usb_power = None
+        if usb_power_cfg:
+            backend = usb_power_cfg.get("backend", "uhubctl")
+            if backend == "serial":
+                from smoke_test_ai.drivers.usb_power_serial import SerialUsbPowerController
+                usb_power = SerialUsbPowerController(
+                    port=usb_power_cfg["port"],
+                    off_duration=usb_power_cfg.get("off_duration", 3.0),
+                    serial_port=usb_power_cfg.get("serial_port"),
+                    device_serial=usb_power_cfg.get("device_serial"),
+                )
+            else:
+                usb_power = UsbPowerController(
+                    hub_location=usb_power_cfg["hub_location"],
+                    port=usb_power_cfg["port"],
+                    off_duration=usb_power_cfg.get("off_duration", 3.0),
+                )
 
         # Adaptive pipeline decision logic
         effective_build_type = build_type or self.device_config.get("build_type", "userdebug")

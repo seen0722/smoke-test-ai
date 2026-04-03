@@ -30,6 +30,9 @@ dev = [
 pdf = [
     "weasyprint>=60.0",
 ]
+serial-hub = [
+    "usb-port-controller",
+]
 
 [project.scripts]
 smoke-test = "cli:main"
