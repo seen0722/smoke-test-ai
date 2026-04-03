@@ -78,14 +78,14 @@ class ChargingPlugin(TestPlugin):
         # 8. Wait and verify charge is flowing in (counter increasing)
         # Skip charge inflow check if battery is full (100%) — charging IC stops at full
         battery_level = recovered.get("level", 0)
-        if battery_level >= 100 or recovered["status"] == 5:
-            logger.info(f"Battery full (level={battery_level}%, status=5) — "
-                        f"skip charge inflow check")
+        if battery_level >= 95 or recovered["status"] == 5:
+            logger.info(f"Battery near full (level={battery_level}%, status={recovered['status']}) — "
+                        f"skip charge inflow check (trickle charge too slow to measure)")
             return TestResult(
                 id=tid, name=tname, status=TestStatus.PASS,
                 message=f"Charging detection OK — "
                         f"discharge: {before_cc}→{after_cc} ({discharge_delta} uAh), "
-                        f"battery full ({battery_level}%) — charge inflow check skipped")
+                        f"battery near full ({battery_level}%) — charge inflow check skipped")
 
         time.sleep(settle_time)
         charging = self._get_battery_info(adb)
