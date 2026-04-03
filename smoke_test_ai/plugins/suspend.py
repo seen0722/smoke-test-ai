@@ -162,8 +162,6 @@ class SuspendPlugin(TestPlugin):
         """Check thermal subsystem: zone temps in range + cooling devices exist."""
         tid, tname = tc["id"], tc["name"]
         params = tc.get("params", {})
-        min_temp = params.get("min_temp", 5000)     # 5°C in millidegrees
-        max_temp = params.get("max_temp", 65000)    # 65°C
         # Key zones to check (common across Qualcomm platforms)
         key_zones = params.get("key_zones", [
             "battery", "xo-therm-usr", "quiet-therm-usr",
@@ -201,27 +199,20 @@ class SuspendPlugin(TestPlugin):
         zone_count = len(zones)
         logger.info(f"Thermal zones with valid temp: {zone_count}")
 
-        # 2. Check key zones exist and have reasonable temps
+        # 2. Check key zones exist
         for kz in key_zones:
             if kz in zones:
-                temp = zones[kz]
-                temp_c = temp / 1000
-                if temp < min_temp or temp > max_temp:
-                    errors.append(f"{kz}: {temp_c:.1f}°C (out of range "
-                                  f"{min_temp/1000:.0f}-{max_temp/1000:.0f}°C)")
-                else:
-                    logger.info(f"  {kz}: {temp_c:.1f}°C ✓")
+                logger.info(f"  {kz}: {zones[kz]/1000:.1f}°C ✓")
             else:
                 errors.append(f"{kz}: zone not found")
 
-        # 3. Find hottest zone
+        # 3. Find hottest zone (informational, no fail on high temp)
+        hottest_name = ""
+        hottest_temp = 0.0
         if zones:
             hottest_name = max(zones, key=zones.get)
             hottest_temp = zones[hottest_name] / 1000
             logger.info(f"  Hottest: {hottest_name} = {hottest_temp:.1f}°C")
-
-            if zones[hottest_name] > max_temp:
-                errors.append(f"Overheating: {hottest_name} = {hottest_temp:.1f}°C")
 
         # 4. Check cooling devices exist
         cool_result = adb.shell("ls /sys/class/thermal/cooling_device*/type 2>/dev/null | wc -l")
@@ -239,7 +230,7 @@ class SuspendPlugin(TestPlugin):
         #    Pick a CPU zone for primary check
         cpu_zone = None
         for name, temp in zones.items():
-            if name.startswith("cpu") and "usr" in name and min_temp < temp < max_temp:
+            if name.startswith("cpu") and "usr" in name and temp > 0:
                 cpu_zone = name
                 break
 

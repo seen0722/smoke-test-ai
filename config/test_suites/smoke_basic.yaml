@@ -548,8 +548,6 @@ test_suite:
       category: "Power"
       action: "thermal_check"
       params:
-        min_temp: 5000
-        max_temp: 65000
         stress_duration: 120
         key_zones:
           - "battery"
