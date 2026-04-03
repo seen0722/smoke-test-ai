@@ -4,7 +4,7 @@ import zipfile
 import urllib.request
 from pathlib import Path
 from smoke_test_ai.drivers.adb_controller import AdbController
-from smoke_test_ai.drivers.usb_power import UsbPowerController
+from smoke_test_ai.drivers.usb_power_serial import SerialUsbPowerController
 from smoke_test_ai.drivers.flash.base import FlashDriver
 from smoke_test_ai.drivers.flash.fastboot import FastbootFlashDriver
 from smoke_test_ai.drivers.flash.custom import CustomFlashDriver
@@ -369,21 +369,12 @@ class Orchestrator:
         usb_power_cfg = self.device_config.get("usb_power")
         usb_power = None
         if usb_power_cfg:
-            backend = usb_power_cfg.get("backend", "uhubctl")
-            if backend == "serial":
-                from smoke_test_ai.drivers.usb_power_serial import SerialUsbPowerController
-                usb_power = SerialUsbPowerController(
-                    port=usb_power_cfg["port"],
-                    off_duration=usb_power_cfg.get("off_duration", 3.0),
-                    serial_port=usb_power_cfg.get("serial_port"),
-                    device_serial=usb_power_cfg.get("device_serial"),
-                )
-            else:
-                usb_power = UsbPowerController(
-                    hub_location=usb_power_cfg["hub_location"],
-                    port=usb_power_cfg["port"],
-                    off_duration=usb_power_cfg.get("off_duration", 3.0),
-                )
+            usb_power = SerialUsbPowerController(
+                port=usb_power_cfg["port"],
+                off_duration=usb_power_cfg.get("off_duration", 3.0),
+                serial_port=usb_power_cfg.get("serial_port"),
+                device_serial=usb_power_cfg.get("device_serial"),
+            )
 
         # Adaptive pipeline decision logic
         effective_build_type = build_type or self.device_config.get("build_type", "userdebug")
@@ -838,24 +829,14 @@ class Orchestrator:
             usb_ok = False
             usb_msg = f"Not configured — {usb_tests} test(s) will SKIP"
             if usb_power:
-                # Verify uhubctl can actually communicate with the hub
                 try:
-                    import subprocess
-                    hub_loc = self.device_config.get("usb_power", {}).get("hub_location", "")
-                    port = self.device_config.get("usb_power", {}).get("port", "")
-                    result = subprocess.run(
-                        ["uhubctl", "-l", str(hub_loc), "-p", str(port)],
-                        capture_output=True, text=True, timeout=5,
-                    )
-                    if result.returncode == 0 and "power" in result.stdout.lower():
-                        usb_ok = True
-                        usb_msg = f"hub {hub_loc} port {port} — responding"
-                    else:
-                        usb_msg = f"hub {hub_loc} port {port} — uhubctl error"
-                except FileNotFoundError:
-                    usb_msg = "uhubctl not installed"
+                    ctrl = usb_power._ensure_connected()
+                    info = ctrl.get_device_info()
+                    serial = info.get("serial", "unknown")
+                    usb_ok = True
+                    usb_msg = f"Serial hub {serial} port {usb_power.port} — connected"
                 except Exception as e:
-                    usb_msg = f"uhubctl check failed: {str(e)[:40]}"
+                    usb_msg = f"Serial hub connection failed: {str(e)[:40]}"
             checks.append({
                 "name": "USB Power Control",
                 "level": "OK" if usb_ok else ("WARNING" if usb_power else "INFO"),

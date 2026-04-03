@@ -2,7 +2,7 @@
 
 ## 目標
 
-透過 USB 斷電/上電（uhubctl），驗證裝置正確偵測充電狀態變化。利用現有 `UsbPowerController` 實現自動化充電偵測測試。
+透過 USB 斷電/上電（Serial Hub），驗證裝置正確偵測充電狀態變化。利用 `SerialUsbPowerController` 實現自動化充電偵測測試。
 
 ## 測試流程
 

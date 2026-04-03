@@ -121,22 +121,13 @@ def reset_test(device, suite, serial, config_dir, boot_timeout, reset_delay, bui
     # USB power cycle to avoid offline charging mode
     usb_power_cfg = device_config.get("device", {}).get("usb_power")
     if usb_power_cfg:
-        backend = usb_power_cfg.get("backend", "uhubctl")
-        if backend == "serial":
-            from smoke_test_ai.drivers.usb_power_serial import SerialUsbPowerController
-            usb_power = SerialUsbPowerController(
-                port=usb_power_cfg["port"],
-                off_duration=usb_power_cfg.get("off_duration", 3.0),
-                serial_port=usb_power_cfg.get("serial_port"),
-                device_serial=usb_power_cfg.get("device_serial"),
-            )
-        else:
-            from smoke_test_ai.drivers.usb_power import UsbPowerController
-            usb_power = UsbPowerController(
-                hub_location=usb_power_cfg["hub_location"],
-                port=usb_power_cfg["port"],
-                off_duration=usb_power_cfg.get("off_duration", 3.0),
-            )
+        from smoke_test_ai.drivers.usb_power_serial import SerialUsbPowerController
+        usb_power = SerialUsbPowerController(
+            port=usb_power_cfg["port"],
+            off_duration=usb_power_cfg.get("off_duration", 3.0),
+            serial_port=usb_power_cfg.get("serial_port"),
+            device_serial=usb_power_cfg.get("device_serial"),
+        )
         delay = reset_delay or usb_power_cfg.get("reset_delay", 3)
         console.print(f"[cyan]Waiting {delay}s for device shutdown before USB power cycle...[/]")
         import time

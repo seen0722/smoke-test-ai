@@ -6,7 +6,7 @@
 
 **Architecture:** 新增 `ChargingPlugin`，透過 `PluginContext.usb_power` 控制 USB 電源。需擴充 `PluginContext` 加入 `usb_power` 欄位，並讓 orchestrator/test_runner 傳入。在 `smoke_basic.yaml` 新增一個 charging_detection 測試項。
 
-**Tech Stack:** uhubctl (UsbPowerController), `dumpsys battery`, existing plugin architecture
+**Tech Stack:** Serial Hub (SerialUsbPowerController), `dumpsys battery`, existing plugin architecture
 
 ---
 

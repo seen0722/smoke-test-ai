@@ -31,7 +31,7 @@ Host PC (Linux/Mac/Win)
 │   │   └── Mobly Bundled Snippets APK (apks/ — 自動安裝至 DUT)
 │   └── Reporter (CLI / JSON / HTML / Test Plan)
 │
-├── USB Hub (uhubctl per-port power switching)
+├── Serial USB Hub (UHB-07, VBUS power switching)
 │   ├── DUT USB-C (AOA2 HID + ADB + 電源控制)
 │   └── Peer Phone USB (SMS 雙機測試, optional)
 │
@@ -42,7 +42,7 @@ Host PC (Linux/Mac/Win)
 
 | 硬體 | 成本 | 用途 |
 |------|------|------|
-| USB Hub (uhubctl 相容) | ~$30 | USB 電源控制 + 連接 DUT |
+| Serial USB Hub (UHB-07) | ~$30 | USB VBUS 電源控制 + 連接 DUT |
 | USB-C 線 | ~$3 | AOA2 HID + ADB |
 | Peer Phone + USB 線 | optional | SMS 雙機功能測試 |
 | **總計/台** | **~$33** | (不含 Peer Phone) |
@@ -59,48 +59,36 @@ pip install -e .
 pip install mobly  # 功能測試 plugin 需要 (Telephony/WiFi/BLE/Audio/Network)
 # Mobly Bundled Snippets APK 已內建於 apks/ 目錄，測試時自動安裝至裝置
 
-# macOS: 安裝 libusb + uhubctl
-brew install libusb uhubctl
+# macOS: 安裝 libusb
+brew install libusb
 
-# Linux: 安裝 libusb + uhubctl
-sudo apt install libusb-1.0-0-dev uhubctl
+# 安裝 serial USB hub 控制套件
+pip install -e ".[serial-hub]"
 ```
 
-### USB Hub 電源控制設定（uhubctl）
+### USB Hub 電源控制設定（Serial Hub UHB-07）
 
-使用支援 per-port power switching (PPPS) 的 USB hub，可實現程式化控制 DUT 電源。用於 factory reset 後防止離線充電模式、flash 後乾淨重開機、USB 偵測超時自動恢復。
+使用 serial USB hub controller (UHB-07) 實現程式化控制 DUT 的 VBUS 5V 電源。透過 RS-232 serial 通訊直接控制硬體 MOSFET，**保證切斷 VBUS 電源**。
 
-**推薦 USB Hub：**
+用途：充電偵測、suspend/deep sleep 測試、factory reset 後防止離線充電模式、flash 後乾淨重開機。
 
-> ⚠️ **重要：** 許多 USB hub 雖然支援 uhubctl per-port power switching (PPPS)，但只切斷 **data 信號線**，不切斷 **VBUS 5V 電源**。若需要真正斷電（充電測試、deep sleep 測試），必須選擇經驗證可切 VBUS 的 hub。
-
-| 型號 | Port 數 | VBUS 切斷 | 備註 |
-|------|---------|-----------|------|
-| **AmazonBasics HU9002V1** | 10 | ✅ 確認 ([#229](https://github.com/mvp/uhubctl/issues/229)) | USB 3.1，用戶確認手機停充 |
-| **Yepkit YKUSH3** | 3 | ✅ 保證 | 專為 VBUS 切換設計，需用 `ykushcmd` |
-| **Yepkit YKUSH XS** | 1 | ✅ 保證 | 單 port，可串接現有 hub |
-| RSHTECH RSH-ST07C | 7 | ❌ 只切 data | VIA VL822，VBUS 不斷，實體開關可切 |
-| Plugable USB3-HUB7BC | 7 | ❓ 未驗證 | VIA VL813，需自行測試 |
-
-> 完整選購指南見 [docs/plans/2026-03-11-uhubctl-usb-power-control-design.md](docs/plans/2026-03-11-uhubctl-usb-power-control-design.md)
->
-> 驗證 VBUS 是否可切：插上手機/USB 燈，執行 `uhubctl -l <location> -p <port> -a off`，確認手機停充或 USB 燈熄滅
-
-**驗證 hub 是否支援：**
+**安裝：**
 
 ```bash
-uhubctl
-# 應顯示 hub 的 port 狀態和 "power" 資訊
-# 確認 DUT 所在的 hub location 和 port 編號
+pip install -e ".[serial-hub]"
 ```
 
-**Linux 免 sudo 設定（udev rule）：**
+**驗證 hub 連線：**
 
-```bash
-echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="2109", MODE="0666"' | \
-  sudo tee /etc/udev/rules.d/52-usb-hub-power.rules
-sudo udevadm control --reload-rules && sudo udevadm trigger
+```python
+from usb_port_controller import UsbPortController
+ctrl = UsbPortController.find(serial="UHB-07")
+print(ctrl.get_status())   # {1: True, 2: True, 3: True, ...}
+ctrl.port_off(3)           # 切斷 port 3 VBUS
+ctrl.port_on(3)            # 恢復 port 3 VBUS
 ```
+
+Source: https://github.com/seen0722/usb-port-controller
 
 ## 快速開始
 
@@ -126,9 +114,9 @@ device:
   screen_capture:
     method: "webcam"           # webcam | adb
     webcam_device: "/dev/video0"
-  usb_power:                   # USB 電源控制 (optional, 需 uhubctl)
-    hub_location: "1-1"        # uhubctl hub location
-    port: 1                    # DUT 所在 port
+  usb_power:                   # USB 電源控制 (optional, 需 serial hub)
+    device_serial: "UHB-07"    # Serial hub device serial
+    port: 3                    # DUT 所在 port
     off_duration: 20.0         # 斷電持續秒數
     reset_delay: 3             # factory reset 後等待裝置關機再斷電（秒）
   setup_wizard:
@@ -217,8 +205,8 @@ smoke-test suites list
 | `bluetooth` | BLE 掃描/廣播、Classic 掃描、開關切換、Adapter 資訊、配對列表、LE Audio | Mobly Snippet BLE/BT API |
 | `audio` | 音頻播放、音量控制、麥克風靜音、裝置偵測、路由資訊 | Mobly Snippet Media/Audio API |
 | `network` | HTTP 下載、TCP 連通性 | ADB curl + Mobly Snippet |
-| `charging` | 充電偵測（USB 斷電/上電驗證充電恢復）| uhubctl + `dumpsys battery` |
-| `suspend` | Suspend/Resume + Deep Sleep 驗證、ADB Reboot | uhubctl + `soc_sleep/stats` |
+| `charging` | 充電偵測（USB 斷電/上電驗證充電恢復）| Serial Hub + `dumpsys battery` |
+| `suspend` | Suspend/Resume + Deep Sleep 驗證、ADB Reboot | Serial Hub + `soc_sleep/stats` |
 
 ### Google Mobly Bundled Snippets
 
@@ -260,7 +248,7 @@ smoke_test_ai/plugins/
 ├── bluetooth.py         # BluetoothPlugin — BLE 裝置掃描 (Mobly Snippet)
 ├── audio.py             # AudioPlugin — 音頻播放驗證 (Mobly Snippet)
 ├── network.py           # NetworkPlugin — HTTP 下載 + TCP 連通性
-├── charging.py          # ChargingPlugin — USB 斷電/上電充電偵測 (uhubctl)
+├── charging.py          # ChargingPlugin — USB 斷電/上電充電偵測 (Serial Hub)
 └── suspend.py           # SuspendPlugin — Suspend/Resume + Deep Sleep 驗證 + ADB Reboot
 ```
 
@@ -307,12 +295,12 @@ smoke_test_ai/plugins/
 - `http_download` — HTTP 下載測試，支援 WiFi/行動數據模式切換
 - `tcp_connect` — TCP 連通性測試
 
-**ChargingPlugin** 使用 uhubctl USB 電源控制 + `dumpsys battery`：
+**ChargingPlugin** 使用 Serial Hub USB 電源控制 + `dumpsys battery`：
 - `detect` — 充電偵測測試：確認初始充電中 → USB 斷電 → 等待 → USB 上電 → ADB 重連 → 確認充電恢復
 - 需要 `usb_power` 設定，未設定時自動 SKIP
 - 測試後自動重連 Mobly Snippet（USB power cycle 會中斷 RPC 連線）
 
-**SuspendPlugin** 使用 uhubctl USB 電源控制 + `soc_sleep/stats`：
+**SuspendPlugin** 使用 Serial Hub USB 電源控制 + `soc_sleep/stats`：
 - `deep_sleep` — Suspend/Resume + Deep Sleep 驗證：讀取 soc_sleep stats → 開飛航模式 → 螢幕關閉 → USB 斷電 120s → USB 上電 → ADB 重連 → 喚醒螢幕 → 確認 aosd/cxsd/ddr 計數增加
 - `reboot` — ADB Reboot 驗證：`adb reboot` → 等待裝置重啟 → 確認 `sys.boot_completed=1`
 - 需要能切 VBUS 的 USB hub（deep_sleep 測試），未設定時自動 SKIP
@@ -581,7 +569,7 @@ pytest tests/test_adb_controller.py -v
 | ADB | subprocess + adb CLI |
 | 設定檔 | PyYAML |
 | CLI | Click + Rich |
-| USB 電源控制 | uhubctl (per-port power switching) |
+| USB 電源控制 | Serial Hub UHB-07 (VBUS power switching) |
 | 功能測試 | Google Mobly Bundled Snippets (Telephony/WiFi/BLE/Audio/Network) |
 | 報告 | Jinja2 (HTML + Test Plan) + JSON |
 | 測試 | pytest + pytest-mock (285 tests) |

@@ -31,10 +31,7 @@ device:
     webcam_crop: [100, 50, 1080, 1920]
 
   usb_power:
-    # backend: "uhubctl"           # Default: uhubctl (requires brew install uhubctl)
-    # hub_location: "1-1"          # uhubctl hub location
-    backend: "serial"              # Alternative: serial USB hub controller
-    device_serial: "UHB-07"        # Auto-discover by device serial (recommended)
+    device_serial: "UHB-07"        # Auto-discover by device serial
     # serial_port: "/dev/cu.usbserial-111240"  # Or use explicit path
     port: 3
     off_duration: 20.0

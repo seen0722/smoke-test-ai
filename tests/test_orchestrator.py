@@ -318,7 +318,7 @@ class TestOrchestratorRun:
     def test_flash_triggers_power_cycle(self, MockAdb, mock_sleep, settings, device_config):
         """After flash, power_cycle is called if usb_power configured."""
         device_config["device"]["usb_power"] = {
-            "hub_location": "1-1", "port": 1, "off_duration": 2.0,
+            "device_serial": "UHB-07", "port": 1, "off_duration": 2.0,
         }
         orch = Orchestrator(settings=settings, device_config=device_config)
         mock_adb_inst = self._mock_adb()
@@ -328,7 +328,7 @@ class TestOrchestratorRun:
         with patch.object(orch, "_get_flash_driver", return_value=mock_flash_driver), \
              patch.object(orch, "_generate_reports"), \
              patch.object(orch, "_pre_test_setup"), \
-             patch("smoke_test_ai.core.orchestrator.UsbPowerController") as MockPower:
+             patch("smoke_test_ai.core.orchestrator.SerialUsbPowerController") as MockPower:
             mock_power = MagicMock()
             mock_power.power_cycle.return_value = True
             MockPower.return_value = mock_power
