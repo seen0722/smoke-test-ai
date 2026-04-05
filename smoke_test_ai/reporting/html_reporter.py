@@ -103,10 +103,11 @@ class HtmlReporter:
         for cat in seen_order:
             groups[cat] = []
 
-        for r in results:
+        for seq, r in enumerate(results, 1):
             cat = category_map.get(r.id, "Other")
             rd = r.to_dict()
             rd["category"] = cat
+            rd["seq"] = seq
             # Enrich with procedure and criteria
             tc = test_config_map.get(r.id, {})
             rd["procedure"] = HtmlReporter._build_procedure(tc) if tc else ""

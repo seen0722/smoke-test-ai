@@ -632,9 +632,10 @@
     </div>
     <div class="cat-table-wrap">
       <table>
-        <tr><th>ID</th><th>Test</th><th>Status</th><th>Duration</th><th>Message</th></tr>
+        <tr><th>#</th><th>ID</th><th>Test</th><th>Status</th><th>Duration</th><th>Message</th></tr>
         {% for r in cat.tests %}
         <tr data-status="{{ r.status }}" {% if r.procedure %}class="has-detail" onclick="toggleDetail('d-{{ r.id }}', this)"{% endif %}>
+          <td class="dur-col">{{ r.seq }}</td>
           <td class="id-col">{{ r.id }}</td>
           <td>{{ r.name }}</td>
           <td><span class="status s-{{ r.status }}">{{ r.status }}</span></td>
@@ -643,7 +644,7 @@
         </tr>
         {% if r.procedure %}
         <tr class="detail-row" id="d-{{ r.id }}">
-          <td colspan="5">
+          <td colspan="6">
             <div class="detail-content">
               <div class="detail-item">
                 <span class="detail-label">Procedure</span>
@@ -677,9 +678,10 @@
   </div>
   <div class="flat-table animate-in d4">
     <table>
-      <tr><th>ID</th><th>Test</th><th>Status</th><th>Duration</th><th>Message</th></tr>
+      <tr><th>#</th><th>ID</th><th>Test</th><th>Status</th><th>Duration</th><th>Message</th></tr>
       {% for r in results %}
       <tr data-status="{{ r.status }}">
+        <td class="dur-col">{{ loop.index }}</td>
         <td class="id-col">{{ r.id }}</td>
         <td>{{ r.name }}</td>
         <td><span class="status s-{{ r.status }}">{{ r.status }}</span></td>
