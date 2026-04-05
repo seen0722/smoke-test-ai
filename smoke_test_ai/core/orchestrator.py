@@ -702,8 +702,11 @@ class Orchestrator:
                 if line:
                     crashes.append({"type": "Native Crash", "detail": f"/data/tombstones/{line}"})
 
-            # Kernel panics
-            dmesg = adb.shell("dmesg | grep -iE '(panic|oops|bug:)' | tail -5")
+            # Kernel panics — filter out common false positives
+            dmesg = adb.shell(
+                "dmesg | grep -iE '(kernel panic|Oops:|BUG:|Unable to handle)' "
+                "| grep -ivE '(debugfs|debug bus|evtlog|panic_on|flag)' | tail -5"
+            )
             dmesg_out = dmesg.stdout if hasattr(dmesg, "stdout") else str(dmesg)
             for line in dmesg_out.splitlines():
                 line = line.strip()
