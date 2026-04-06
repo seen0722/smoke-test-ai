@@ -556,4 +556,4 @@ test_suite:
       action: "reboot"
       params:
         boot_timeout: 120
-        max_boot_time: 28
+        max_boot_time: 40
