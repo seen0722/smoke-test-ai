@@ -440,8 +440,10 @@ class Orchestrator:
             logger.error("Device not found via ADB")
             return []
 
-        # Skip Setup Wizard (only for fresh userdebug — AOA handles user builds)
-        if not skip_setup and fresh_state and not need_aoa:
+        # Skip Setup Wizard if fresh state (factory reset or full flash)
+        # For user builds: AOA should handle it, but if AOA failed and ADB
+        # is available (root/userdebug), skip via ADB as fallback
+        if not skip_setup and fresh_state:
             adb.skip_setup_wizard()
 
         # FBE unlock: only needed after state reset (fresh_state)
