@@ -550,9 +550,10 @@ test_suite:
     # ADB Reboot（放最後，會中斷連線）
     # ============================================================
     - id: "adb_reboot"
-      name: "ADB Reboot 驗證"
+      name: "Boot Time 量測"
       type: "suspend"
       category: "Boot"
       action: "reboot"
       params:
         boot_timeout: 120
+        max_boot_time: 28

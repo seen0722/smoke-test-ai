@@ -27,6 +27,7 @@ class HtmlReporter:
         failed = sum(1 for r in results if r.status == TestStatus.FAIL)
         error = sum(1 for r in results if r.status == TestStatus.ERROR)
         skipped = sum(1 for r in results if r.status == TestStatus.SKIP)
+        total_duration = sum(r.duration for r in results)
 
         # Build category summary and grouped results
         category_map = category_map or {}
@@ -47,6 +48,7 @@ class HtmlReporter:
             device_info=device_info or {},
             categories=categories,
             has_categories=bool(category_map),
+            total_duration=total_duration,
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(html)

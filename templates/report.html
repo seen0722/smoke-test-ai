@@ -431,7 +431,7 @@
       {% else %}
       <div class="overall-badge pass">&#x2714; ALL PASSED</div>
       {% endif %}
-      <div>{{ total }} tests</div>
+      <div>{{ total }} tests | {{ "%.0f"|format(total_duration // 60) }}m {{ "%.0f"|format(total_duration % 60) }}s</div>
     </div>
   </header>
 
@@ -728,7 +728,7 @@
 
   <footer class="animate-in d6">
     <span>smoke-test-ai</span>
-    <span>Generated {{ timestamp }}</span>
+    <span>Total: {{ "%.0f"|format(total_duration // 60) }}m {{ "%.0f"|format(total_duration % 60) }}s | Generated {{ timestamp }}</span>
   </footer>
 </div>
 

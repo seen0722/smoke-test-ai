@@ -27,16 +27,18 @@ class SuspendPlugin(TestPlugin):
         )
 
     def _reboot(self, tc: dict, ctx: PluginContext) -> TestResult:
-        """Reboot device and verify it comes back up."""
+        """Reboot device, measure boot time, verify within threshold."""
         tid, tname = tc["id"], tc["name"]
         params = tc.get("params", {})
         boot_timeout = params.get("boot_timeout", 120)
+        max_boot_time = params.get("max_boot_time", 0)  # 0 = no threshold
 
         adb = ctx.adb
 
-        # 1. Reboot
+        # 1. Reboot and start timer
         logger.info("Initiating ADB reboot...")
         adb.shell("reboot")
+        reboot_start = time.time()
 
         # 2. Wait for device to disconnect first
         logger.info("Waiting for device to disconnect...")
@@ -60,8 +62,16 @@ class SuspendPlugin(TestPlugin):
                 result = adb.shell("getprop sys.boot_completed")
                 boot_out = result.stdout if hasattr(result, "stdout") else str(result)
                 if boot_out.strip() == "1":
+                    boot_time = time.time() - reboot_start
+                    logger.info(f"Boot completed in {boot_time:.1f}s")
+
+                    if max_boot_time > 0 and boot_time > max_boot_time:
+                        return TestResult(id=tid, name=tname, status=TestStatus.FAIL,
+                                          message=f"Boot time {boot_time:.1f}s exceeds "
+                                                  f"threshold {max_boot_time}s")
+
                     return TestResult(id=tid, name=tname, status=TestStatus.PASS,
-                                      message="ADB reboot + boot completed OK")
+                                      message=f"Boot time: {boot_time:.1f}s")
             except Exception:
                 pass
             time.sleep(2)
