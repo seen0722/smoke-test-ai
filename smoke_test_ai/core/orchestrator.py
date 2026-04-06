@@ -568,7 +568,38 @@ class Orchestrator:
             runner._usb_power = usb_power
             runner._mobly_dut = getattr(self, '_mobly_dut', None)
 
-            results = runner.run_suite(suite_config)
+            # Run all tests EXCEPT adb_reboot (which clears logcat)
+            reboot_tc = None
+            tests = suite_config.get("test_suite", {}).get("tests", [])
+            for tc in tests:
+                if tc.get("id") == "adb_reboot":
+                    reboot_tc = tc
+                    break
+            if reboot_tc:
+                tests_without_reboot = [t for t in tests if t["id"] != "adb_reboot"]
+                suite_no_reboot = dict(suite_config)
+                suite_no_reboot["test_suite"] = dict(suite_config["test_suite"])
+                suite_no_reboot["test_suite"]["tests"] = tests_without_reboot
+                results = runner.run_suite(suite_no_reboot)
+            else:
+                results = runner.run_suite(suite_config)
+
+            # Bugreport + Crash Analysis BEFORE reboot (logcat still intact)
+            try:
+                crash_analysis = self._capture_bugreport_and_analyze(adb)
+                if crash_analysis:
+                    device_info["crash_analysis"] = crash_analysis
+            except Exception as e:
+                logger.warning(f"Crash analysis failed: {e}")
+
+            # Now run adb_reboot as the last test
+            if reboot_tc:
+                reboot_suite = dict(suite_config)
+                reboot_suite["test_suite"] = dict(suite_config["test_suite"])
+                reboot_suite["test_suite"]["tests"] = [reboot_tc]
+                reboot_results = runner.run_suite(reboot_suite)
+                results.extend(reboot_results)
+
             if webcam_capture:
                 webcam_capture.close()
             # Cleanup Mobly devices
@@ -584,14 +615,6 @@ class Orchestrator:
                     pass
         else:
             results = []
-
-        # Post-test: Bugreport + Crash Analysis
-        try:
-            crash_analysis = self._capture_bugreport_and_analyze(adb)
-            if crash_analysis:
-                device_info["crash_analysis"] = crash_analysis
-        except Exception as e:
-            logger.warning(f"Crash analysis failed: {e}")
 
         # Stage 4: Report
         logger.info("=== Stage 4: Report ===")
