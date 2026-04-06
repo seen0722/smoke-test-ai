@@ -1284,6 +1284,8 @@ class TestSuspendPlugin:
             MagicMock(stdout="aosd:3, cxsd:3, ddr:3"),
             # 2. airplane mode enable
             MagicMock(stdout=""),
+            # 2b. NFC disable
+            MagicMock(stdout=""),
             # 3. screen off (KEYCODE_POWER)
             MagicMock(stdout=""),
             # 4. wake keyevent
@@ -1293,6 +1295,8 @@ class TestSuspendPlugin:
             # 6. final stats read
             MagicMock(stdout="aosd\n\tCount                    :44\ncxsd\n\tCount                    :19\nddr \n\tCount                    :19\n"),
             # 7. airplane mode disable
+            MagicMock(stdout=""),
+            # 7b. NFC enable
             MagicMock(stdout=""),
         ]
         ctx = PluginContext(adb=adb, settings={}, device_capabilities={}, usb_power=usb_power)
@@ -1311,11 +1315,13 @@ class TestSuspendPlugin:
         adb.shell.side_effect = [
             MagicMock(stdout="aosd\n\tCount                    :3\ncxsd\n\tCount                    :3\nddr \n\tCount                    :3\n"),       # initial
             MagicMock(stdout=""),                              # airplane on
+            MagicMock(stdout=""),                              # NFC disable
             MagicMock(stdout=""),                              # screen off
             MagicMock(stdout=""),                              # wake
             MagicMock(stdout="mScreenState=ON"),               # screen on
             MagicMock(stdout="aosd:3, cxsd:3, ddr:3"),        # same stats!
             MagicMock(stdout=""),                              # airplane off
+            MagicMock(stdout=""),                              # NFC enable
             MagicMock(stdout="PARTIAL_WAKE_LOCK 'bad_wl' (uid=1000)"),  # wakelock diag
             MagicMock(stdout="name\tactive\nusb\t50\t50\t0\t0\t0\t5000\t100\t0\t0"),  # kernel sources
         ]
@@ -1334,11 +1340,13 @@ class TestSuspendPlugin:
         adb.shell.side_effect = [
             MagicMock(stdout="aosd:3, cxsd:3, ddr:3"),
             MagicMock(stdout=""),                              # airplane on
+            MagicMock(stdout=""),                              # NFC disable
             MagicMock(stdout=""),                              # screen off
             MagicMock(stdout=""),                              # wake
             MagicMock(stdout="mScreenState=OFF"),              # screen still off!
             MagicMock(stdout="aosd\n\tCount                    :10\ncxsd\n\tCount                    :10\nddr \n\tCount                    :10\n"),
             MagicMock(stdout=""),                              # airplane off
+            MagicMock(stdout=""),                              # NFC enable
         ]
         ctx = PluginContext(adb=adb, settings={}, device_capabilities={}, usb_power=usb_power)
         with patch("smoke_test_ai.plugins.suspend.time.sleep"):
@@ -1354,6 +1362,7 @@ class TestSuspendPlugin:
         adb.shell.side_effect = [
             MagicMock(stdout="aosd:3, cxsd:3, ddr:3"),
             MagicMock(stdout=""),                              # airplane on
+            MagicMock(stdout=""),                              # NFC disable
             MagicMock(stdout=""),                              # screen off
         ]
         ctx = PluginContext(adb=adb, settings={}, device_capabilities={}, usb_power=usb_power)

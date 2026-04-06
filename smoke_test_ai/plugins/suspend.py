@@ -100,9 +100,10 @@ class SuspendPlugin(TestPlugin):
 
         logger.info(f"Initial sleep stats: {initial_stats}")
 
-        # 2. Enable airplane mode (prevent radio wakelocks)
+        # 2. Enable airplane mode + disable NFC (prevent wakelocks)
         adb.shell("cmd connectivity airplane-mode enable")
-        logger.info("Airplane mode enabled")
+        adb.shell("svc nfc disable 2>/dev/null")
+        logger.info("Airplane mode enabled, NFC disabled")
         time.sleep(2)
 
         # 3. Turn screen off — device must be in screen-off state to enter suspend
@@ -142,8 +143,9 @@ class SuspendPlugin(TestPlugin):
 
         logger.info(f"Final sleep stats: {final_stats}")
 
-        # 7. Disable airplane mode
+        # 7. Restore airplane mode + NFC
         adb.shell("cmd connectivity airplane-mode disable")
+        adb.shell("svc nfc enable 2>/dev/null")
         logger.info("Airplane mode disabled")
 
         # 8. Verify deep sleep occurred
