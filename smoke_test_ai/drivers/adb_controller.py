@@ -180,15 +180,13 @@ class AdbController:
         return state == "RUNNING_UNLOCKED"
 
     def skip_setup_wizard(self) -> bool:
-        """Skip Setup Wizard by disabling it and marking device as provisioned (userdebug only)."""
+        """Skip Setup Wizard by disabling it and marking device as provisioned."""
         provisioned = self.shell("settings get global device_provisioned").stdout.strip()
         if provisioned == "1":
             logger.info("Device already provisioned, Setup Wizard not active")
             return True
         logger.info("Skipping Setup Wizard...")
-        self.shell("settings put global device_provisioned 1")
-        self.shell("settings put secure user_setup_complete 1")
-        # Discover and disable all Setup Wizard packages
+        # Discover and disable all Setup Wizard packages FIRST
         result = self.shell("pm list packages | grep setupwizard")
         sw_packages = [
             line.replace("package:", "").strip()
@@ -199,17 +197,21 @@ class AdbController:
             r = self.shell(f"pm disable-user --user 0 {pkg}")
             if "disabled" in r.stdout:
                 logger.info(f"Disabled {pkg}")
+        # Mark device as provisioned (after disabling wizard so it can't revert)
+        self.shell("settings put global device_provisioned 1")
+        self.shell("settings put secure user_setup_complete 1")
         self.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME")
-        time.sleep(2)
+        time.sleep(3)
+        # Verify provisioned
+        provisioned = self.shell("settings get global device_provisioned").stdout.strip()
+        if provisioned != "1":
+            logger.warning("Failed to skip Setup Wizard")
+            return False
+        logger.info("Setup Wizard skipped successfully")
         # Re-enable Setup Wizard packages (needed for future OTA/reset)
         for pkg in sw_packages:
             self.shell(f"pm enable {pkg}")
-        provisioned = self.shell("settings get global device_provisioned").stdout.strip()
-        if provisioned == "1":
-            logger.info("Setup Wizard skipped successfully")
-            return True
-        logger.warning("Failed to skip Setup Wizard")
-        return False
+        return True
 
     def factory_reset(self) -> None:
         """Factory reset the device. Device will reboot and all data will be erased."""
