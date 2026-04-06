@@ -710,20 +710,46 @@ class Orchestrator:
                 if "FATAL EXCEPTION" in line:
                     crashes.append({"type": "FATAL EXCEPTION", "detail": line.strip()})
 
-            # ANR
+            # ANR — extract app name and reason
             anr_log = adb.shell("logcat -b events -d | grep 'am_anr'")
             anr_out = anr_log.stdout if hasattr(anr_log, "stdout") else str(anr_log)
             for line in anr_out.splitlines():
                 if "am_anr" in line:
                     crashes.append({"type": "ANR", "detail": line.strip()})
 
-            # Native crashes
-            tombstones = adb.shell("ls /data/tombstones/ 2>/dev/null | tail -5")
+            # Also check ANR traces directory
+            anr_traces = adb.shell("ls -t /data/anr/ 2>/dev/null | head -5")
+            anr_traces_out = anr_traces.stdout if hasattr(anr_traces, "stdout") else str(anr_traces)
+            for line in anr_traces_out.splitlines():
+                line = line.strip()
+                if line and line.endswith(".txt"):
+                    # Read first line of trace for process name
+                    trace_head = adb.shell(f"head -3 /data/anr/{line} 2>/dev/null")
+                    trace_out = (trace_head.stdout if hasattr(trace_head, "stdout")
+                                 else str(trace_head)).strip()
+                    detail = f"/data/anr/{line}"
+                    if trace_out:
+                        detail += f" | {trace_out.splitlines()[0][:80]}"
+                    crashes.append({"type": "ANR Trace", "detail": detail})
+
+            # Tombstones — read process name and signal from each
+            tombstones = adb.shell("ls -t /data/tombstones/ 2>/dev/null | head -5")
             tomb_out = tombstones.stdout if hasattr(tombstones, "stdout") else str(tombstones)
             for line in tomb_out.splitlines():
                 line = line.strip()
-                if line:
-                    crashes.append({"type": "Native Crash", "detail": f"/data/tombstones/{line}"})
+                if not line:
+                    continue
+                # Read tombstone header for process name and signal
+                tomb_head = adb.shell(
+                    f"head -15 /data/tombstones/{line} 2>/dev/null "
+                    f"| grep -E '(pid:|signal|>>> .+ <<<)' | head -3"
+                )
+                tomb_detail = (tomb_head.stdout if hasattr(tomb_head, "stdout")
+                               else str(tomb_head)).strip()
+                detail = f"/data/tombstones/{line}"
+                if tomb_detail:
+                    detail += f" | {' '.join(tomb_detail.splitlines())}"
+                crashes.append({"type": "Tombstone", "detail": detail})
 
             # Kernel panics — filter out common false positives
             dmesg = adb.shell(
