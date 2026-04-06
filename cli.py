@@ -95,7 +95,8 @@ def test(suite, serial, config_dir):
 @click.option("--boot-timeout", default=180, help="Max seconds to wait for boot after reset")
 @click.option("--reset-delay", default=None, type=int, help="Seconds to wait after factory reset before USB power cycle (default: from YAML or 10)")
 @click.option("--build-type", type=click.Choice(["user", "userdebug"]), default=None, help="Build type (overrides YAML)")
-def reset_test(device, suite, serial, config_dir, boot_timeout, reset_delay, build_type):
+@click.option("--build-info", default=None, type=click.Path(exists=True), help="Build info JSON from CI (expected values)")
+def reset_test(device, suite, serial, config_dir, boot_timeout, reset_delay, build_type, build_info):
     """Factory reset → bootstrap → full smoke test."""
     from smoke_test_ai.core.orchestrator import Orchestrator
     from smoke_test_ai.drivers.adb_controller import AdbController
@@ -152,6 +153,13 @@ def reset_test(device, suite, serial, config_dir, boot_timeout, reset_delay, bui
     else:
         console.print("\n[cyan]User build: ADB wait deferred to orchestrator (after AOA)[/]")
 
+    # Load build info JSON if provided
+    build_info_data = None
+    if build_info:
+        import json
+        build_info_data = json.loads(Path(build_info).read_text())
+        console.print(f"[cyan]Build info loaded: {build_info}[/]")
+
     # Run full pipeline (skip flash, run setup wizard skip + bootstrap)
     orch = Orchestrator(settings=settings, device_config=device_config)
     results = orch.run(
@@ -161,6 +169,7 @@ def reset_test(device, suite, serial, config_dir, boot_timeout, reset_delay, bui
         skip_setup=False,
         build_type=build_type,
         is_factory_reset=True,
+        build_info=build_info_data,
         config_dir=str(config_path),
     )
 
