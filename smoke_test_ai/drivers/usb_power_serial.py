@@ -50,8 +50,17 @@ class SerialUsbPowerController:
             logger.info(f"Serial USB port {self.port} ON")
             return True
         except Exception as e:
-            logger.warning(f"Serial USB power_on failed: {e}")
-            return False
+            # Serial connection may have dropped during power_off;
+            # reconnect and retry once
+            logger.warning(f"Serial USB power_on failed ({e}), reconnecting...")
+            try:
+                self._ctrl = None
+                self._ensure_connected().port_on(self.port)
+                logger.info(f"Serial USB port {self.port} ON (after reconnect)")
+                return True
+            except Exception as e2:
+                logger.warning(f"Serial USB power_on retry failed: {e2}")
+                return False
 
     def power_cycle(self, off_duration: float | None = None) -> bool:
         duration = off_duration if off_duration is not None else self.off_duration
