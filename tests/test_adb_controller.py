@@ -172,12 +172,16 @@ def test_skip_setup_wizard_already_provisioned(mock_run, mock_sleep, adb):
 def test_skip_setup_wizard_needs_skip(mock_run, mock_sleep, adb):
     mock_run.side_effect = [
         MagicMock(returncode=0, stdout="0\n", stderr=""),                             # get device_provisioned
-        MagicMock(returncode=0, stdout="package:com.google.android.setupwizard\n", stderr=""),  # pm list packages
-        MagicMock(returncode=0, stdout="Package com.google.android.setupwizard new state: disabled-user\n", stderr=""),  # pm disable
+        MagicMock(returncode=0, stdout="package:com.google.android.setupwizard\npackage:com.google.android.partnersetup\n", stderr=""),  # pm list
+        MagicMock(returncode=0, stdout="", stderr=""),                                # force-stop setupwizard
+        MagicMock(returncode=0, stdout="", stderr=""),                                # force-stop partnersetup
+        MagicMock(returncode=0, stdout="Package com.google.android.setupwizard new state: disabled-user\n", stderr=""),  # pm disable setupwizard
+        MagicMock(returncode=0, stdout="Package com.google.android.partnersetup new state: disabled-user\n", stderr=""),  # pm disable partnersetup
         MagicMock(returncode=0, stdout="", stderr=""),                                # put device_provisioned 1
         MagicMock(returncode=0, stdout="", stderr=""),                                # put user_setup_complete 1
         MagicMock(returncode=0, stdout="", stderr=""),                                # am start HOME
         MagicMock(returncode=0, stdout="1\n", stderr=""),                             # verify device_provisioned
-        MagicMock(returncode=0, stdout="", stderr=""),                                # pm enable
+        MagicMock(returncode=0, stdout="", stderr=""),                                # pm enable setupwizard
+        MagicMock(returncode=0, stdout="", stderr=""),                                # pm enable partnersetup
     ]
     assert adb.skip_setup_wizard() is True

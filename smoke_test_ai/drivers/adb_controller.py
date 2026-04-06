@@ -180,24 +180,28 @@ class AdbController:
         return state == "RUNNING_UNLOCKED"
 
     def skip_setup_wizard(self) -> bool:
-        """Skip Setup Wizard by disabling it and marking device as provisioned."""
+        """Skip Setup Wizard by force-stopping, disabling, and marking provisioned."""
         provisioned = self.shell("settings get global device_provisioned").stdout.strip()
         if provisioned == "1":
             logger.info("Device already provisioned, Setup Wizard not active")
             return True
         logger.info("Skipping Setup Wizard...")
-        # Discover and disable all Setup Wizard packages FIRST
-        result = self.shell("pm list packages | grep setupwizard")
+        # Discover ALL setup-related packages
+        result = self.shell("pm list packages | grep -iE 'setupwizard|partnersetup'")
         sw_packages = [
             line.replace("package:", "").strip()
             for line in result.stdout.strip().splitlines()
             if line.strip()
         ]
+        # Force-stop first (kill running activities before disable)
+        for pkg in sw_packages:
+            self.shell(f"am force-stop {pkg}")
+        # Disable all setup packages
         for pkg in sw_packages:
             r = self.shell(f"pm disable-user --user 0 {pkg}")
             if "disabled" in r.stdout:
                 logger.info(f"Disabled {pkg}")
-        # Mark device as provisioned (after disabling wizard so it can't revert)
+        # Mark device as provisioned
         self.shell("settings put global device_provisioned 1")
         self.shell("settings put secure user_setup_complete 1")
         self.shell("am start -a android.intent.action.MAIN -c android.intent.category.HOME")
