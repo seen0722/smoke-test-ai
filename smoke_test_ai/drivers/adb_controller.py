@@ -186,6 +186,9 @@ class AdbController:
             logger.info("Device already provisioned, Setup Wizard not active")
             return True
         logger.info("Skipping Setup Wizard...")
+        # Wait for Setup Wizard to fully load before killing it
+        # (too early = wizard's init overwrites our settings)
+        time.sleep(5)
         # Discover ALL setup-related packages
         result = self.shell("pm list packages | grep -iE 'setupwizard|partnersetup'")
         sw_packages = [
